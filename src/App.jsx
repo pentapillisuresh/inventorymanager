@@ -6,6 +6,7 @@ import Inventory from './pages/Inventory';
 import Invoices from './pages/Invoices';
 import Outlets from './pages/Outlets';
 import Reports from './pages/Reports';
+import AddProduct from './pages/Product';
 import Login from './pages/Login';
 import { localStorageManager } from './utils/localStorage';
 
@@ -38,6 +39,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="inventory/*" element={<Inventory />} />
           <Route path="invoices/*" element={<Invoices />} />
+          <Route path="add-product" element={<AddProduct />} />
           <Route path="outlets" element={<Outlets />} />
           <Route path="reports" element={<Reports />} />
         </Route>
