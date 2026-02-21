@@ -229,7 +229,7 @@ const Sidebar = () => {
               </li>
             ))}
             
-            {/* Add Product Button - Now matching the blue theme */}
+        
             <li className="pt-4 mt-4 border-t border-gray-200">
               <button
                 onClick={handleAddProduct}
