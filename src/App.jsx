@@ -11,15 +11,6 @@ import Login from './pages/Login';
 import { localStorageManager } from './utils/localStorage';
 
 function App() {
-  useEffect(() => {
-    try {
-      // Initialize dummy data on first load
-      localStorageManager.initializeData();
-      console.log('App initialized with localStorage data');
-    } catch (error) {
-      console.error('Error initializing localStorage:', error);
-    }
-  }, []);
 
   const PrivateRoute = ({ children }) => {
     const isLoggedIn = localStorageManager.isLoggedIn();

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiLogIn, FiMail, FiLock,  } from 'react-icons/fi';
+import { FiLogIn, FiMail, FiLock } from 'react-icons/fi';
 import { localStorageManager } from '../utils/localStorage';
+import ApiService from '../utils/ApiService';
+import { Alert } from 'antd';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -10,7 +12,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
@@ -21,31 +23,46 @@ const Login = () => {
       setIsLoading(false);
       return;
     }
+    const payload = {
+      email: email,
+      password: password
+    }
+    try {
+      const response = await ApiService.post('/auth/login', payload, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    // Simulate API call delay
-    setTimeout(() => {
-      try {
-        // Dummy credentials for demonstration
-        const dummyCredentials = {
-          email: 'manager@store.com',
-          password: 'password123'
-        };
-
-        if (email === dummyCredentials.email && password === dummyCredentials.password) {
-          // Initialize data if needed
-          localStorageManager.initializeData();
-          localStorageManager.setLoginStatus(true);
-          navigate('/');
-        } else {
-          setError('Invalid credentials. Use: manager@store.com / password123');
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        setError('Login failed. Please try again.');
-      } finally {
-        setIsLoading(false);
+      if (!response) {
+        throw new Error(data.message || 'Login failed. Please check your credentials.');
       }
-    }, 1000);
+
+      // Redirect based on user role
+      if (response?.user?.role === "store_manager") {
+        localStorageManager.setLoginStatus();
+      
+        // Store token and user data
+        localStorage.setItem("token", response.token);
+        localStorage.setItem("user", JSON.stringify(response.user));
+      
+        localStorageManager.setManagerData(response.user);
+      
+        navigate("/");
+      } else {
+        alert("Sorry, you are not a manager. Please login with manager credentials.");
+      }
+        } catch (err) {
+      setError(err.message || 'An error occurred during login. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Pre-fill with demo credentials for testing
+  const handleDemoLogin = () => {
+    setEmail('admin@gmail.com');
+    setPassword('Admin@123');
   };
 
   const handleResetData = () => {
@@ -61,7 +78,6 @@ const Login = () => {
         {/* Header */}
         <div className="bg-primary-600 rounded-t-2xl p-8 text-white">
           <div className="flex items-center justify-center space-x-3 mb-4">
-            {/* <FiStore size={32} /> */}
             <h1 className="text-3xl font-bold">Manager Portal</h1>
           </div>
           <p className="text-center text-primary-100">
@@ -80,7 +96,7 @@ const Login = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 input-field"
+                  className="pl-10 input-field w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter your email"
                   required
                   disabled={isLoading}
@@ -96,7 +112,7 @@ const Login = () => {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 input-field"
+                  className="pl-10 input-field w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="Enter your password"
                   required
                   disabled={isLoading}
@@ -110,19 +126,10 @@ const Login = () => {
               </div>
             )}
 
-            {/* Demo Credentials */}
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600 font-medium mb-2">Demo Credentials:</p>
-              <div className="text-sm space-y-1">
-                <p>Email: <span className="font-mono">manager@store.com</span></p>
-                <p>Password: <span className="font-mono">password123</span></p>
-              </div>
-            </div>
-
             <button
               type="submit"
               disabled={isLoading}
-              className="btn-primary w-full flex items-center justify-center space-x-2 py-3"
+              className="btn-primary w-full flex items-center justify-center space-x-2 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
@@ -137,6 +144,17 @@ const Login = () => {
               )}
             </button>
           </form>
+
+          {/* Demo Login Button */}
+          <div className="mt-4">
+            <button
+              onClick={handleDemoLogin}
+              className="w-full text-center text-sm text-primary-600 hover:text-primary-700 font-medium"
+              type="button"
+            >
+              Use demo credentials
+            </button>
+          </div>
 
           {/* Reset Data Button */}
           <div className="mt-6">
