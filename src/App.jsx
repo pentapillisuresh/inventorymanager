@@ -14,6 +14,7 @@ function App() {
 
   const PrivateRoute = ({ children }) => {
     const isLoggedIn = localStorageManager.isLoggedIn();
+    console.log("isLoggedIn:::",isLoggedIn);
     return isLoggedIn ? children : <Navigate to="/login" />;
   };
 

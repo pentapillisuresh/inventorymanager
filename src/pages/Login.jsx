@@ -40,14 +40,13 @@ const Login = () => {
 
       // Redirect based on user role
       if (response?.user?.role === "store_manager") {
-        localStorageManager.setLoginStatus();
-      
+        localStorageManager.setLoginStatus(true);
         // Store token and user data
         localStorage.setItem("token", response.token);
         localStorage.setItem("user", JSON.stringify(response.user));
       
         localStorageManager.setManagerData(response.user);
-      
+        console.log("aaa::",response)
         navigate("/");
       } else {
         alert("Sorry, you are not a manager. Please login with manager credentials.");
