@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiLogIn, FiMail, FiLock } from 'react-icons/fi';
 import { localStorageManager } from '../utils/localStorage';
@@ -11,6 +11,10 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(()=>{
+    localStorage.clear();
+  },[])
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -44,9 +48,12 @@ const Login = () => {
         // Store token and user data
         localStorage.setItem("token", response.token);
         localStorage.setItem("user", JSON.stringify(response.user));
-      
+        const userData=response.user
+        console.log("useID:::",userData.id)
+
+      await getManagerStoreID(userData.id,response.token)
         localStorageManager.setManagerData(response.user);
-        console.log("aaa::",response)
+
         navigate("/");
       } else {
         alert("Sorry, you are not a manager. Please login with manager credentials.");
@@ -56,6 +63,33 @@ const Login = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getManagerStoreID = async (managerId,clientToken) => {
+console.log("managerID:::",managerId)
+    try {
+      const response = await ApiService.get(`stores/getStoreByManagerID/${managerId}`, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response) {
+        throw new Error( 'Login failed. Store not found.');
+      }
+
+      // Redirect based on user role
+      if (response) {
+        // Store token and user data
+        localStorage.setItem("storeId", response.storeId);
+        localStorage.setItem("store",  JSON.stringify(response.data));
+      } else {
+        alert("Sorry, Login failed. Store not found..");
+      }
+        } catch (err) {
+      setError(err.message || 'An error occurred during login. Please try again.');
+    } 
   };
 
   // Pre-fill with demo credentials for testing

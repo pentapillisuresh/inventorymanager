@@ -1,15 +1,64 @@
 // src/pages/Invoices.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import InvoiceList from '../components/Invoices/InvoiceList';
 import CreateInvoice from '../components/Invoices/CreateInvoice';
-import { localStorageManager } from '../utils/localStorage';
 import { FiFileText, FiPlus, FiList } from 'react-icons/fi';
+import ApiService from '../utils/ApiService';
 
 const Invoices = () => {
   const navigate = useNavigate();
-  const invoices = localStorageManager.getInvoices();
-  const pendingCount = invoices.filter(inv => inv.status === 'Pending').length;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0,
+    currentPage: 1
+  });
+  const clientToken = localStorage.getItem('token');
+  const storeId = localStorage.getItem('storeId');
+  // Update src/services/api.js with new endpoints
+  const fetchStoreInvoices = async (page = 1, limit = 10) => {
+    try {
+      const response = await ApiService.get('/invoice/storeManager', {
+        params: { page, limit },
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching store invoices:', error);
+      throw error;
+    }
+  };
+
+  // Fetch invoices data
+  const fetchInvoicesData = async (page = 1) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetchStoreInvoices(page);
+      setInvoices(response.invoices || []);
+      setPagination({
+        total: response.total || 0,
+        totalPages: response.totalPages || 0,
+        currentPage: response.currentPage || 1
+      });
+    } catch (err) {
+      console.error('Error fetching invoices:', err);
+      setError('Failed to load invoices. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvoicesData();
+  }, []);
 
   const handleViewInvoice = (invoice) => {
     // Implement view invoice modal or page
@@ -18,9 +67,19 @@ const Invoices = () => {
 
   const tabs = [
     { id: 'list', label: 'All Invoices', icon: FiList, path: '/invoices', badge: invoices.length },
-    { id: 'create', label: 'Create Invoice', icon: FiPlus, path: '/invoices/create' },
-    { id: 'pending', label: 'Pending', icon: FiFileText, path: '/invoices/pending', badge: pendingCount },
+    { id: 'create', label: 'Create Invoice', icon: FiPlus, path: '/invoices/create' }
   ];
+
+  if (loading && invoices.length === 0) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading invoices...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -44,7 +103,7 @@ const Invoices = () => {
             >
               <tab.icon />
               <span>{tab.label}</span>
-              {tab.badge !== undefined && (
+              {tab.badge !== undefined && tab.badge > 0 && (
                 <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full">
                   {tab.badge}
                 </span>
@@ -58,46 +117,14 @@ const Invoices = () => {
       <Routes>
         <Route path="/" element={
           <InvoiceList 
-            invoices={invoices} 
+            invoices={invoices}
+            pagination={pagination}
+            onPageChange={fetchInvoicesData}
             onView={handleViewInvoice} 
+            loading={loading}
           />
         } />
         <Route path="/create" element={<CreateInvoice />} />
-        <Route path="/pending" element={
-          <div className="card">
-            <h2 className="text-2xl font-bold mb-6">Pending Invoices</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3 px-4">Invoice ID</th>
-                    <th className="text-left py-3 px-4">Outlet</th>
-                    <th className="text-left py-3 px-4">Date</th>
-                    <th className="text-left py-3 px-4">Amount</th>
-                    <th className="text-left py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices
-                    .filter(inv => inv.status === 'Pending')
-                    .map((invoice) => (
-                      <tr key={invoice.id} className="border-b hover:bg-yellow-50">
-                        <td className="py-4 px-4 font-medium">{invoice.id}</td>
-                        <td className="py-4 px-4">{invoice.outletName}</td>
-                        <td className="py-4 px-4">{invoice.date}</td>
-                        <td className="py-4 px-4 font-semibold">${invoice.total.toFixed(2)}</td>
-                        <td className="py-4 px-4">
-                          <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm">
-                            Awaiting Admin Approval
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        } />
       </Routes>
     </div>
   );

@@ -1,28 +1,115 @@
 // src/pages/Inventory.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import InventoryTable from '../components/Inventory/InventoryTable';
-import ArrangeInventory from '../components/Inventory/ArrangeInventory';
 import StockLevels from '../components/Inventory/StockLevels';
-import { localStorageManager } from '../utils/localStorage';
-import { FiGrid, FiMapPin, FiAlertTriangle, FiTrendingUp } from 'react-icons/fi';
+import { FiGrid, FiAlertTriangle, FiTrendingUp, FiPackage } from 'react-icons/fi';
+import ApiService from '../utils/ApiService';
 
 const Inventory = () => {
   const navigate = useNavigate();
-  const inventory = localStorageManager.getInventory();
-  const lowStockCount = inventory.filter(item => item.quantity < item.minStock).length;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [inventory, setInventory] = useState([]);
+  const [summary, setSummary] = useState({
+    totalItems: 0,
+    totalQuantity: 0,
+    uniqueProducts: 0,
+    lowStockCount: 0,
+    outOfStockCount: 0,
+    healthPercentage: 0
+  });
+
+  const clientToken = localStorage.getItem('token');
+  const storeId = localStorage.getItem('storeId');
+
+  const fetchInventorySummary = async (storeId = 1) => {
+    try {
+      const response = await ApiService.get(`/stores/${storeId}/inventory/summary`,{
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      console.log("fetchInventorySummary::",response)
+      return response;
+    } catch (error) {
+      console.error('Error fetching inventory summary:', error);
+      throw error;
+    }
+  };
   
-  // Calculate stock level counts for badges
-  const criticalStockCount = inventory.filter(item => 
+
+  // Update src/services/api.js to include inventory endpoints
+ const fetchInventoryList = async (storeId = 1) => {
+  try {
+    const response = await ApiService.get(`/inventory/store/${storeId}`,{
+      headers: {
+        Authorization: `Bearer ${clientToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error('Error fetching inventory list:', error);
+    throw error;
+  }
+};
+  // Fetch inventory data
+  const fetchInventoryData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Fetch inventory summary
+      const summaryData = await fetchInventorySummary(storeId);
+      setSummary(summaryData);
+      
+      // Fetch inventory list
+      const inventoryData = await fetchInventoryList(storeId);
+      setInventory(inventoryData);
+      
+    } catch (err) {
+      console.error('Error fetching inventory data:', err);
+      setError('Failed to load inventory data. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInventoryData();
+  }, []);
+
+  // Transform API inventory data to match component expectations
+  const transformedInventory = inventory.map(item => ({
+    id: item.id,
+    productId: item.productId,
+    name: item.Product?.name || 'Unknown Product',
+    sku: item.Product?.sku || 'N/A',
+    category: item.Product?.Category?.name || 'Uncategorized',
+    quantity: item.quantity,
+    unit: 'units',
+    price: parseFloat(item.Product?.price) || 0,
+    minStock: item.reorderLevel,
+    room: item.Room?.name || null,
+    rack: item.Rack?.name || null,
+    freezer: item.Freezer?.name || null,
+    lastUpdated: item.lastUpdated,
+    thresholdQuantity: item.Product?.thresholdQuantity
+  }));
+
+  // Calculate stock level counts
+  const lowStockCount = transformedInventory.filter(item => item.quantity < item.minStock).length;
+  const criticalStockCount = transformedInventory.filter(item => 
     item.quantity < item.minStock * 0.5
   ).length;
-  
-  const goodStockCount = inventory.filter(item => 
+  const goodStockCount = transformedInventory.filter(item => 
     item.quantity >= item.minStock * 1.5
   ).length;
 
   const handleEditProduct = (product) => {
-    // Implement edit functionality
+    // Implement edit functionality with API
     console.log('Edit product:', product);
   };
 
@@ -32,14 +119,8 @@ const Inventory = () => {
       label: 'View Inventory', 
       icon: FiGrid, 
       path: '/inventory',
-      badge: inventory.length,
+      badge: transformedInventory.length,
       badgeColor: 'bg-blue-100 text-blue-800'
-    },
-    { 
-      id: 'arrange', 
-      label: 'Arrange Stock', 
-      icon: FiMapPin, 
-      path: '/inventory/arrange'
     },
     { 
       id: 'low-stock', 
@@ -59,22 +140,53 @@ const Inventory = () => {
     },
   ];
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading inventory data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card p-6 text-center">
+        <div className="text-red-600 mb-4">
+          <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-bold text-gray-800 mb-2">Error Loading Inventory</h3>
+        <p className="text-gray-600">{error}</p>
+        <button 
+          onClick={fetchInventoryData}
+          className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2">Inventory Management</h1>
         <p className="text-gray-600">Manage and organize your store's stock</p>
         
-        {/* Quick Stats Bar */}
+        {/* Quick Stats Bar from API Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           <div className="bg-white border rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Items</p>
-                <p className="text-xl font-bold">{inventory.length}</p>
+                <p className="text-xl font-bold">{summary.totalItems}</p>
               </div>
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <FiGrid className="text-blue-600" />
+                <FiPackage className="text-blue-600" />
               </div>
             </div>
           </div>
@@ -82,35 +194,37 @@ const Inventory = () => {
           <div className="bg-white border rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Low Stock</p>
-                <p className="text-xl font-bold text-yellow-600">{lowStockCount}</p>
-              </div>
-              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                <FiAlertTriangle className="text-yellow-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white border rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Critical</p>
-                <p className="text-xl font-bold text-red-600">{criticalStockCount}</p>
-              </div>
-              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <FiAlertTriangle className="text-red-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white border rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Good Stock</p>
-                <p className="text-xl font-bold text-green-600">{goodStockCount}</p>
+                <p className="text-sm text-gray-600">Total Quantity</p>
+                <p className="text-xl font-bold">{summary.totalQuantity}</p>
               </div>
               <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <FiTrendingUp className="text-green-600" />
+                <FiPackage className="text-green-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white border rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Unique Products</p>
+                <p className="text-xl font-bold">{summary.uniqueProducts}</p>
+              </div>
+              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                <FiGrid className="text-purple-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white border rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Stock Health</p>
+                <p className="text-xl font-bold">{summary.healthPercentage}%</p>
+              </div>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                parseFloat(summary.healthPercentage) >= 60 ? 'bg-green-100' : 'bg-red-100'
+              }`}>
+                <FiTrendingUp className={parseFloat(summary.healthPercentage) >= 60 ? 'text-green-600' : 'text-red-600'} />
               </div>
             </div>
           </div>
@@ -146,12 +260,10 @@ const Inventory = () => {
       <Routes>
         <Route path="/" element={
           <InventoryTable 
-            inventory={inventory} 
+            inventory={transformedInventory} 
             onEdit={handleEditProduct} 
           />
         } />
-        
-        <Route path="/arrange" element={<ArrangeInventory />} />
         
         <Route path="/low-stock" element={
           <div className="card">
@@ -198,7 +310,7 @@ const Inventory = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {inventory
+                      {transformedInventory
                         .filter(item => item.quantity < item.minStock)
                         .map((item) => {
                           const percentage = Math.round((item.quantity / item.minStock) * 100);
@@ -279,7 +391,7 @@ const Inventory = () => {
         } />
         
         <Route path="/stock-levels" element={
-          <StockLevels inventory={inventory} />
+          <StockLevels inventory={transformedInventory} />
         } />
         
         {/* Catch-all route for inventory sub-routes */}

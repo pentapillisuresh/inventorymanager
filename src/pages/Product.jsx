@@ -1,20 +1,21 @@
+// src/pages/Inventory.jsx
 import React, { useState, useEffect } from 'react';
-import { 
-  FiPlus, 
-  FiEdit2, 
-  FiTrash2, 
-  FiSearch,
-  FiFilter,
-  FiPackage,
-  FiDollarSign,
-  FiAlertCircle,
-  FiX,
-  FiEye
-} from 'react-icons/fi';
-import { localStorageManager } from '../utils/localStorage';
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiFilter, FiPackage, FiDollarSign, FiAlertCircle, FiX, FiEye } from 'react-icons/fi';
+import ApiService from '../utils/ApiService';
 
 const Inventory = () => {
   const [inventory, setInventory] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [summary, setSummary] = useState({
+    totalItems: 0,
+    totalQuantity: 0,
+    uniqueProducts: 0,
+    lowStockCount: 0,
+    outOfStockCount: 0,
+    healthPercentage: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -24,32 +25,186 @@ const Inventory = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    category: '',
+    sku: '',
+    categoryId: '',
     price: '',
     quantity: '',
-    minStock: 5
+    costPrice: '',
+    thresholdQuantity: 10
   });
   const [errors, setErrors] = useState({});
+  const clientToken = localStorage.getItem('token');
+  const storeId = localStorage.getItem('storeId');
+  // Load inventory data from API
+  const loadInventory = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [summaryData, inventoryData, categoriesData] = await Promise.all([
+        fetchInventorySummary(storeId),
+        fetchInventoryList(storeId),
+        fetchCategories()
+      ]);
+
+      setSummary(summaryData);
+      setInventory(inventoryData);
+      setCategories(categoriesData.categories || []);
+    } catch (err) {
+      console.error('Error loading inventory:', err);
+      setError('Failed to load inventory data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============= INVENTORY API ENDPOINTS =============
+
+  // Fetch inventory summary
+  const fetchInventorySummary = async (storeId = 1) => {
+    try {
+      const response = await ApiService.get(`/stores/${storeId}/inventory/summary`, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching inventory summary:', error);
+      throw error;
+    }
+  };
+
+  // Fetch inventory list
+  const fetchInventoryList = async (storeId = 1) => {
+    try {
+      const response = await ApiService.get(`/inventory/store/${storeId}`, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching inventory list:', error);
+      throw error;
+    }
+  };
+
+
+  // Fetch all categories
+  const fetchCategories = async () => {
+    try {
+      const response = await ApiService.get('/categories', {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      throw error;
+    }
+  };
+
+  // Create a new product
+  const createProduct = async (productData) => {
+    try {
+      const response = await ApiService.post('/products', productData, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+  
+      const createdProduct = response;
+  
+      // 🔥 Prepare inventory payload
+      const inventoryPayload = {
+        productId: createdProduct.id,
+        quantity: Number(productData.quantity) || 0,
+        action: "add"
+      };
+  
+      // ✅ Wait for inventory creation
+      await addInventory(inventoryPayload);
+  
+      return createdProduct;
+  
+    } catch (error) {
+      console.error('Error creating product:', error);
+      throw error;
+    }
+  };
+  const addInventory = async (inventoryData) => {
+    try {
+      const response = await ApiService.post(
+        `inventory/storeManager/${storeId}`,
+        inventoryData,
+        {
+          headers: {
+            Authorization: `Bearer ${clientToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+  
+      return response;
+  
+    } catch (error) {
+      console.error('Error adding inventory:', error);
+      throw error;
+    }
+  };
+  // Update an existing product
+  const updateProduct = async (productId, productData) => {
+    try {
+      const response = await ApiService.put(`/products/${productId}`, productData, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating product:', error);
+      throw error;
+    }
+  };
+
+  // Delete a product
+  const deleteProduct = async (productId) => {
+    try {
+      const response = await ApiService.delete(`/products/${productId}`, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      throw error;
+    }
+  };
+
 
   useEffect(() => {
     loadInventory();
-    
+
     // Listen for add product event from sidebar
     const handleOpenAddModal = () => {
+      resetForm();
       setShowAddModal(true);
     };
-    
+
     window.addEventListener('openAddProductModal', handleOpenAddModal);
-    
+
     return () => {
       window.removeEventListener('openAddProductModal', handleOpenAddModal);
     };
   }, []);
-
-  const loadInventory = () => {
-    const data = localStorageManager.getInventory();
-    setInventory(data);
-  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -65,87 +220,121 @@ const Inventory = () => {
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.name.trim()) {
       newErrors.name = 'Product name is required';
     }
-    
-    if (!formData.category) {
-      newErrors.category = 'Category is required';
+
+    if (!formData.sku.trim()) {
+      newErrors.sku = 'SKU is required';
     }
-    
+
+    if (!formData.categoryId) {
+      newErrors.categoryId = 'Category is required';
+    }
+
     if (!formData.price) {
       newErrors.price = 'Price is required';
     } else if (isNaN(formData.price) || parseFloat(formData.price) <= 0) {
       newErrors.price = 'Price must be a positive number';
     }
-    
+
     if (!formData.quantity) {
       newErrors.quantity = 'Quantity is required';
     } else if (isNaN(formData.quantity) || parseInt(formData.quantity) < 0) {
       newErrors.quantity = 'Quantity must be a non-negative number';
     }
-    
+
+    if (formData.costPrice && (isNaN(formData.costPrice) || parseFloat(formData.costPrice) < 0)) {
+      newErrors.costPrice = 'Cost price must be a positive number';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     if (!validateForm()) return;
 
-    const newProduct = {
-      id: `PRD${String(inventory.length + 1).padStart(3, '0')}`,
-      ...formData,
-      price: parseFloat(formData.price),
-      quantity: parseInt(formData.quantity),
-      minStock: parseInt(formData.minStock) || 5,
-      dateAdded: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const productData = {
+        name: formData.name.trim(),
+        sku: formData.sku.trim(),
+        categoryId: parseInt(formData.categoryId),
+        quantity: parseInt(formData.quantity),
+        price: parseFloat(formData.price),
+        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : null,
+        thresholdQuantity: parseInt(formData.thresholdQuantity) || 10
+      };
 
-    const updatedInventory = [newProduct, ...inventory];
-    localStorageManager.setInventory(updatedInventory);
-    setInventory(updatedInventory);
-    setShowAddModal(false);
-    resetForm();
+      const response = await createProduct(productData);
+
+      if (response.id) {
+        await loadInventory(); // Refresh the list
+        setShowAddModal(false);
+        resetForm();
+        alert('Product added successfully!');
+      }
+    } catch (err) {
+      console.error('Error adding product:', err);
+      alert(err.response?.data?.message || 'Failed to add product. Please try again.');
+    }
   };
 
-  const handleEditProduct = () => {
+  const handleEditProduct = async () => {
     if (!validateForm()) return;
 
-    const updatedInventory = inventory.map(product =>
-      product.id === selectedProduct.id 
-        ? { 
-            ...product, 
-            ...formData,
-            price: parseFloat(formData.price),
-            quantity: parseInt(formData.quantity),
-            minStock: parseInt(formData.minStock) || 5
-          } 
-        : product
-    );
-    
-    localStorageManager.setInventory(updatedInventory);
-    setInventory(updatedInventory);
-    setShowEditModal(false);
-    setSelectedProduct(null);
-    resetForm();
+    try {
+      const productData = {
+        name: formData.name.trim(),
+        sku: formData.sku.trim(),
+        categoryId: parseInt(formData.categoryId),
+        quantity: parseInt(formData.quantity),
+        price: parseFloat(formData.price),
+        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : null,
+        thresholdQuantity: parseInt(formData.thresholdQuantity) || 10
+      };
+
+      const response = await updateProduct(selectedProduct.productId, productData);
+
+      if (response.message === 'Product updated successfully') {
+        await loadInventory(); // Refresh the list
+        setShowEditModal(false);
+        setSelectedProduct(null);
+        resetForm();
+        alert('Product updated successfully!');
+      }
+    } catch (err) {
+      console.error('Error updating product:', err);
+      alert(err.response?.data?.message || 'Failed to update product. Please try again.');
+    }
   };
 
-  const handleDeleteProduct = () => {
-    const updatedInventory = inventory.filter(product => product.id !== selectedProduct.id);
-    localStorageManager.setInventory(updatedInventory);
-    setInventory(updatedInventory);
-    setShowDeleteModal(false);
-    setSelectedProduct(null);
+  const handleDeleteProduct = async () => {
+    try {
+      const response = await deleteProduct(selectedProduct.productId);
+
+      if (response.message === 'Product deleted successfully') {
+        await loadInventory(); // Refresh the list
+        setShowDeleteModal(false);
+        setSelectedProduct(null);
+        alert('Product deleted successfully!');
+      }
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      alert(err.response?.data?.message || 'Failed to delete product. Please try again.');
+    }
   };
 
   const resetForm = () => {
     setFormData({
       name: '',
-      category: '',
+      sku: '',
+      categoryId: '',
       price: '',
       quantity: '',
-      minStock: 5
+      costPrice: '',
+      thresholdQuantity: 10
     });
     setErrors({});
   };
@@ -153,11 +342,13 @@ const Inventory = () => {
   const openEditModal = (product) => {
     setSelectedProduct(product);
     setFormData({
-      name: product.name,
-      category: product.category,
-      price: product.price,
-      quantity: product.quantity,
-      minStock: product.minStock
+      name: product.Product?.name || '',
+      sku: product.Product?.sku || '',
+      categoryId: product.Product?.categoryId?.toString() || '',
+      price: product.Product?.price || '',
+      quantity: product.quantity || '',
+      costPrice: product.Product?.costPrice || '',
+      thresholdQuantity: product.Product?.thresholdQuantity || 10
     });
     setShowEditModal(true);
   };
@@ -173,42 +364,96 @@ const Inventory = () => {
   };
 
   const getStockStatusColor = (product) => {
-    if (product.quantity === 0) return 'bg-red-100 text-red-800';
-    if (product.quantity < product.minStock) return 'bg-yellow-100 text-yellow-800';
+    const quantity = product.quantity;
+    const threshold = product.Product?.thresholdQuantity || product.reorderLevel || 10;
+    if (quantity === 0) return 'bg-red-100 text-red-800';
+    if (quantity < threshold) return 'bg-yellow-100 text-yellow-800';
     return 'bg-green-100 text-green-800';
   };
 
   const getStockStatusText = (product) => {
-    if (product.quantity === 0) return 'Out of Stock';
-    if (product.quantity < product.minStock) return 'Low Stock';
+    const quantity = product.quantity;
+    const threshold = product.Product?.thresholdQuantity || product.reorderLevel || 10;
+    if (quantity === 0) return 'Out of Stock';
+    if (quantity < threshold) return 'Low Stock';
     return 'In Stock';
   };
 
   const getStockStatusIcon = (product) => {
-    if (product.quantity === 0) return <FiX className="inline mr-1" size={14} />;
-    if (product.quantity < product.minStock) return <FiAlertCircle className="inline mr-1" size={14} />;
+    const quantity = product.quantity;
+    const threshold = product.Product?.thresholdQuantity || product.reorderLevel || 10;
+    if (quantity === 0) return <FiX className="inline mr-1" size={14} />;
+    if (quantity < threshold) return <FiAlertCircle className="inline mr-1" size={14} />;
     return null;
   };
 
-  // Get unique categories for filter
-  const categories = ['All', ...new Set(inventory.map(item => item.category))];
+  // Transform inventory data for display
+  const transformedInventory = inventory.map(item => ({
+    id: item.id,
+    productId: item.productId,
+    name: item.Product?.name || 'Unknown Product',
+    sku: item.Product?.sku || 'N/A',
+    category: item.Product?.Category?.name || 'Uncategorized',
+    categoryId: item.Product?.categoryId,
+    price: parseFloat(item.Product?.price || 0),
+    quantity: item.quantity,
+    costPrice: parseFloat(item.Product?.costPrice || 0),
+    thresholdQuantity: item.Product?.thresholdQuantity || item.reorderLevel || 10,
+    location: `${item.Room?.name || ''} ${item.Rack?.name || ''} ${item.Freezer?.name || ''}`.trim(),
+    lastUpdated: item.lastUpdated,
+    dateAdded: new Date(item.createdAt).toLocaleDateString()
+  }));
 
-  const filteredInventory = inventory.filter(product => {
-    const matchesSearch = 
+  // Get unique categories for filter from API categories
+  const filterCategories = ['All', ...categories.map(cat => cat.name)];
+
+  const filteredInventory = transformedInventory.filter(product => {
+    const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.category.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesCategory = categoryFilter === 'All' || product.category === categoryFilter;
-    
+
     return matchesSearch && matchesCategory;
   });
 
-  // Calculate stats
-  const totalProducts = inventory.length;
-  const totalStockValue = inventory.reduce((sum, product) => sum + (product.price * product.quantity), 0);
-  const lowStockCount = inventory.filter(p => p.quantity < p.minStock && p.quantity > 0).length;
-  const outOfStockCount = inventory.filter(p => p.quantity === 0).length;
+  // Calculate stats from summary API
+  const totalProducts = summary.uniqueProducts;
+  const totalStockValue = transformedInventory.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+  const lowStockCount = summary.lowStockCount;
+  const outOfStockCount = summary.outOfStockCount;
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading inventory...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <FiAlertCircle className="mx-auto text-4xl text-red-500 mb-4" />
+          <h3 className="text-lg font-bold text-red-800 mb-2">Error Loading Inventory</h3>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={loadInventory}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -218,15 +463,15 @@ const Inventory = () => {
         <p className="text-gray-600">Manage your products and track stock levels</p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards from API Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <p className="text-sm text-gray-600">Total Products</p>
           <p className="text-2xl font-bold text-gray-800">{totalProducts}</p>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-600">Stock Value</p>
-          <p className="text-2xl font-bold text-green-600">${totalStockValue.toFixed(2)}</p>
+          <p className="text-sm text-gray-600">Total Quantity</p>
+          <p className="text-2xl font-bold text-blue-600">{summary.totalQuantity}</p>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <p className="text-sm text-gray-600">Low Stock Items</p>
@@ -238,6 +483,24 @@ const Inventory = () => {
         </div>
       </div>
 
+      {/* Health Indicator */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">Inventory Health</p>
+            <p className="text-2xl font-bold text-primary-600">{summary.healthPercentage}%</p>
+          </div>
+          <div className="w-2/3">
+            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary-600 rounded-full transition-all duration-500"
+                style={{ width: `${summary.healthPercentage}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Search and Filter Bar */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -245,13 +508,13 @@ const Inventory = () => {
             <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search products by name, ID, or category..."
+              placeholder="Search products by name, SKU, or category..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
-          
+
           <div className="flex items-center gap-3">
             <div className="relative">
               <FiFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -260,12 +523,12 @@ const Inventory = () => {
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 appearance-none bg-white"
               >
-                {categories.map(category => (
+                {filterCategories.map(category => (
                   <option key={category} value={category}>{category}</option>
                 ))}
               </select>
             </div>
-            
+
             <button
               onClick={() => {
                 resetForm();
@@ -287,7 +550,7 @@ const Inventory = () => {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
@@ -301,10 +564,10 @@ const Inventory = () => {
                   <tr key={product.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{product.name}</div>
-                      <div className="text-sm text-gray-500">Added: {product.dateAdded || 'N/A'}</div>
+                      <div className="text-sm text-gray-500">Added: {product.dateAdded}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {product.id}
+                      <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{product.sku}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
@@ -312,15 +575,14 @@ const Inventory = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      ${product.price.toFixed(2)}
+                      ₹{product.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-sm font-medium ${
-                        product.quantity < product.minStock ? 'text-red-600' : 'text-gray-700'
-                      }`}>
+                      <span className={`text-sm font-medium ${product.quantity < product.thresholdQuantity ? 'text-red-600' : 'text-gray-700'
+                        }`}>
                         {product.quantity}
                       </span>
-                      <span className="text-xs text-gray-500 ml-1">/ min {product.minStock}</span>
+                      <span className="text-xs text-gray-500 ml-1">/ min {product.thresholdQuantity}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStockStatusColor(product)}`}>
@@ -403,9 +665,8 @@ const Inventory = () => {
                         name="name"
                         value={formData.name}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.name ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                          }`}
                         placeholder="Enter product name"
                       />
                       {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
@@ -413,32 +674,45 @@ const Inventory = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
+                        SKU *
+                      </label>
+                      <input
+                        type="text"
+                        name="sku"
+                        value={formData.sku}
+                        onChange={handleInputChange}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.sku ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter unique SKU"
+                      />
+                      {errors.sku && <p className="mt-1 text-xs text-red-500">{errors.sku}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         Category *
                       </label>
                       <select
-                        name="category"
-                        value={formData.category}
+                        name="categoryId"
+                        value={formData.categoryId}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.category ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.categoryId ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       >
                         <option value="">Select category</option>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Clothing">Clothing</option>
-                        <option value="Food & Beverages">Food & Beverages</option>
-                        <option value="Furniture">Furniture</option>
-                        <option value="Books">Books</option>
-                        <option value="Sports">Sports</option>
-                        <option value="Other">Other</option>
+                        {categories.map(category => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
                       </select>
-                      {errors.category && <p className="mt-1 text-xs text-red-500">{errors.category}</p>}
+                      {errors.categoryId && <p className="mt-1 text-xs text-red-500">{errors.categoryId}</p>}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Price ($) *
+                          Price (₹) *
                         </label>
                         <input
                           type="number"
@@ -447,9 +721,8 @@ const Inventory = () => {
                           onChange={handleInputChange}
                           min="0"
                           step="0.01"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                            errors.price ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.price ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           placeholder="0.00"
                         />
                         {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price}</p>}
@@ -465,31 +738,49 @@ const Inventory = () => {
                           value={formData.quantity}
                           onChange={handleInputChange}
                           min="0"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                            errors.quantity ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.quantity ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           placeholder="0"
                         />
                         {errors.quantity && <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>}
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Minimum Stock Alert
-                      </label>
-                      <input
-                        type="number"
-                        name="minStock"
-                        value={formData.minStock}
-                        onChange={handleInputChange}
-                        min="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        placeholder="5"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        You'll be alerted when stock falls below this number
-                      </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Cost Price (₹)
+                        </label>
+                        <input
+                          type="number"
+                          name="costPrice"
+                          value={formData.costPrice}
+                          onChange={handleInputChange}
+                          min="0"
+                          step="0.01"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          placeholder="0.00"
+                        />
+                        {errors.costPrice && <p className="mt-1 text-xs text-red-500">{errors.costPrice}</p>}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Threshold Quantity
+                        </label>
+                        <input
+                          type="number"
+                          name="thresholdQuantity"
+                          value={formData.thresholdQuantity}
+                          onChange={handleInputChange}
+                          min="1"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          placeholder="10"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Alert when stock falls below this number
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -555,11 +846,25 @@ const Inventory = () => {
                         name="name"
                         value={formData.name}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.name ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        SKU *
+                      </label>
+                      <input
+                        type="text"
+                        name="sku"
+                        value={formData.sku}
+                        onChange={handleInputChange}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.sku ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                      />
+                      {errors.sku && <p className="mt-1 text-xs text-red-500">{errors.sku}</p>}
                     </div>
 
                     <div>
@@ -567,29 +872,26 @@ const Inventory = () => {
                         Category *
                       </label>
                       <select
-                        name="category"
-                        value={formData.category}
+                        name="categoryId"
+                        value={formData.categoryId}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.category ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.categoryId ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       >
                         <option value="">Select category</option>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Clothing">Clothing</option>
-                        <option value="Food & Beverages">Food & Beverages</option>
-                        <option value="Furniture">Furniture</option>
-                        <option value="Books">Books</option>
-                        <option value="Sports">Sports</option>
-                        <option value="Other">Other</option>
+                        {categories.map(category => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
                       </select>
-                      {errors.category && <p className="mt-1 text-xs text-red-500">{errors.category}</p>}
+                      {errors.categoryId && <p className="mt-1 text-xs text-red-500">{errors.categoryId}</p>}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Price ($) *
+                          Price (₹) *
                         </label>
                         <input
                           type="number"
@@ -598,9 +900,8 @@ const Inventory = () => {
                           onChange={handleInputChange}
                           min="0"
                           step="0.01"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                            errors.price ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.price ? 'border-red-500' : 'border-gray-300'
+                            }`}
                         />
                         {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price}</p>}
                       </div>
@@ -615,26 +916,42 @@ const Inventory = () => {
                           value={formData.quantity}
                           onChange={handleInputChange}
                           min="0"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                            errors.quantity ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.quantity ? 'border-red-500' : 'border-gray-300'
+                            }`}
                         />
                         {errors.quantity && <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>}
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Minimum Stock Alert
-                      </label>
-                      <input
-                        type="number"
-                        name="minStock"
-                        value={formData.minStock}
-                        onChange={handleInputChange}
-                        min="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Cost Price (₹)
+                        </label>
+                        <input
+                          type="number"
+                          name="costPrice"
+                          value={formData.costPrice}
+                          onChange={handleInputChange}
+                          min="0"
+                          step="0.01"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Threshold Quantity
+                        </label>
+                        <input
+                          type="number"
+                          name="thresholdQuantity"
+                          value={formData.thresholdQuantity}
+                          onChange={handleInputChange}
+                          min="1"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -694,11 +1011,11 @@ const Inventory = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">Product ID</p>
-                        <p className="font-medium text-gray-900">{selectedProduct.id}</p>
+                        <p className="font-medium text-gray-900">{selectedProduct.productId}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">Date Added</p>
-                        <p className="font-medium text-gray-900">{selectedProduct.dateAdded || 'N/A'}</p>
+                        <p className="text-sm text-gray-500">SKU</p>
+                        <p className="font-mono text-sm text-gray-900">{selectedProduct.sku}</p>
                       </div>
                     </div>
                   </div>
@@ -719,22 +1036,34 @@ const Inventory = () => {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Price</p>
-                      <p className="font-medium text-gray-900">${selectedProduct.price.toFixed(2)}</p>
+                      <p className="font-medium text-gray-900">₹{selectedProduct.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-500">Current Stock</p>
-                      <p className={`font-medium ${
-                        selectedProduct.quantity < selectedProduct.minStock ? 'text-red-600' : 'text-gray-900'
-                      }`}>
+                      <p className={`font-medium ${selectedProduct.quantity < selectedProduct.thresholdQuantity ? 'text-red-600' : 'text-gray-900'
+                        }`}>
                         {selectedProduct.quantity} units
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Minimum Stock</p>
-                      <p className="font-medium text-gray-900">{selectedProduct.minStock} units</p>
+                      <p className="font-medium text-gray-900">{selectedProduct.thresholdQuantity} units</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Cost Price</p>
+                      <p className="font-medium text-gray-900">₹{selectedProduct.costPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Profit Margin</p>
+                      <p className="font-medium text-green-600">
+                        {((selectedProduct.price - selectedProduct.costPrice) / selectedProduct.costPrice * 100).toFixed(1)}%
+                      </p>
                     </div>
                   </div>
 
@@ -746,10 +1075,17 @@ const Inventory = () => {
                     </p>
                   </div>
 
+                  {selectedProduct.location && (
+                    <div>
+                      <p className="text-sm text-gray-500">Location</p>
+                      <p className="font-medium text-gray-900">{selectedProduct.location}</p>
+                    </div>
+                  )}
+
                   <div className="bg-primary-50 p-4 rounded-lg mt-4">
                     <p className="text-sm text-gray-600">Stock Value</p>
                     <p className="text-2xl font-bold text-primary-600">
-                      ${(selectedProduct.price * selectedProduct.quantity).toFixed(2)}
+                      ₹{(selectedProduct.price * selectedProduct.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                 </div>
@@ -793,9 +1129,14 @@ const Inventory = () => {
                     </h3>
                     <div className="mt-2">
                       <p className="text-sm text-gray-500">
-                        Are you sure you want to delete <span className="font-medium text-gray-900">{selectedProduct?.name}</span>? 
+                        Are you sure you want to delete <span className="font-medium text-gray-900">{selectedProduct?.name}</span>?
                         This action cannot be undone.
                       </p>
+                      {selectedProduct?.quantity > 0 && (
+                        <p className="mt-2 text-sm text-red-600">
+                          Warning: This product has {selectedProduct.quantity} units in stock.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

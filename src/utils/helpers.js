@@ -1,7 +1,7 @@
 export const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD'
+    currency: 'INR'
   }).format(amount);
 };
 
@@ -78,41 +78,68 @@ export const getStockStatus = (quantity, minStock) => {
   return { level: 'good', color: 'green', label: 'Good' };
 };
 
+// src/utils/helpers.js - Update generateReportData function
+
 export const generateReportData = (type, data) => {
   if (!data || !Array.isArray(data)) return [];
   
   switch(type) {
     case 'inventory':
       return data.map(item => ({
-        'Product Name': item.name || '',
-        'SKU': item.sku || '',
-        'Category': item.category || '',
+        'ID': item.id || '',
+        'Product Name': item.Product?.name || '',
+        'SKU': item.Product?.sku || '',
+        'Category': item.Product?.Category?.name || '',
         'Quantity': item.quantity || 0,
-        'Unit': item.unit || '',
-        'Price': item.price || 0,
-        'Min Stock': item.minStock || 0,
-        'Location': `${item.room || ''} ${item.rack || ''} ${item.freezer || ''}`.trim()
+        'Reorder Level': item.reorderLevel || 0,
+        'Price': parseFloat(item.Product?.price || 0),
+        'Location': `${item.Room?.name || ''} ${item.Rack?.name || ''} ${item.Freezer?.name || ''}`.trim(),
+        'Store': item.Store?.name || '',
+        'Last Updated': new Date(item.lastUpdated).toLocaleDateString()
       }));
+      
     case 'sales':
       return data.map(inv => ({
         'Invoice ID': inv.id || '',
-        'Outlet': inv.outletName || '',
-        'Date': inv.date || '',
-        'Amount': inv.total || 0,
+        'Invoice Number': inv.invoiceNumber || '',
+        'Outlet': inv.Outlet?.name || '',
+        'Date': new Date(inv.invoiceDate).toLocaleDateString(),
+        'Total Amount': parseFloat(inv.totalAmount || 0),
+        'Paid Amount': parseFloat(inv.paidAmount || 0),
+        'Credit Amount': parseFloat(inv.creditAmount || 0),
+        'Payment Method': inv.paymentMethod || '',
         'Status': inv.status || '',
-        'Payment': inv.payment || '',
-        'Due Date': inv.dueDate || 'N/A'
+        'Store Manager': inv.StoreManager?.name || ''
       }));
+      
     case 'outlets':
       return data.map(outlet => ({
         'Outlet Name': outlet.name || '',
         'Type': outlet.type || '',
-        'Phone': outlet.phone || '',
-        'Credit Limit': outlet.creditLimit || 0,
-        'Current Due': outlet.currentDue || 0,
-        'Available Credit': (outlet.creditLimit || 0) - (outlet.currentDue || 0),
-        'Status': outlet.status || ''
+        'Contact Person': outlet.contactPerson || '',
+        'Phone': outlet.phoneNumber || '',
+        'Address': outlet.address || '',
+        'Credit Limit': parseFloat(outlet.creditLimit || 0),
+        'Current Credit': parseFloat(outlet.currentCredit || 0),
+        'Available Credit': parseFloat(outlet.creditLimit || 0) - parseFloat(outlet.currentCredit || 0),
+        'Status': outlet.isActive ? 'Active' : 'Inactive',
+        'Store': outlet.Store?.name || ''
       }));
+      
+    case 'credit':
+      const creditInvoices = data.filter(inv => inv.paymentMethod === 'credit');
+      return creditInvoices.map(inv => ({
+        'Invoice ID': inv.id || '',
+        'Invoice Number': inv.invoiceNumber || '',
+        'Outlet': inv.Outlet?.name || '',
+        'Date': new Date(inv.invoiceDate).toLocaleDateString(),
+        'Total Amount': parseFloat(inv.totalAmount || 0),
+        'Paid Amount': parseFloat(inv.paidAmount || 0),
+        'Outstanding Amount': parseFloat(inv.totalAmount || 0) - parseFloat(inv.paidAmount || 0),
+        'Payment Method': inv.paymentMethod || '',
+        'Status': inv.status || ''
+      }));
+      
     default:
       return [];
   }

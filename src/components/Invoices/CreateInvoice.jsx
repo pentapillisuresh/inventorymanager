@@ -1,18 +1,19 @@
 // src/components/Invoices/CreateInvoice.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiPlus, FiTrash2, FiCheck, FiX, FiSave } from 'react-icons/fi';
-import { localStorageManager } from '../../utils/localStorage';
 import { formatCurrency } from '../../utils/helpers';
+import ApiService from '../../utils/ApiService';
 
 const CreateInvoice = () => {
-  const inventory = localStorageManager.getInventory();
-  const outlets = localStorageManager.getOutlets();
-  
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [inventory, setInventory] = useState([]);
+  const [outlets, setOutlets] = useState([]);
+
   // Form state
   const [formData, setFormData] = useState({
     outletId: '',
-    invoiceDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'Credit',
+    paymentMethod: 'paid',
     notes: '',
     items: []
   });
@@ -21,14 +22,83 @@ const CreateInvoice = () => {
   const [newItem, setNewItem] = useState({
     productId: '',
     quantity: 1,
-    price: 0
+    price: 0,
+    inventoryId: ''
+
   });
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const clientToken = localStorage.getItem('token');
+  const storeId = localStorage.getItem('storeId');
+  const fetchOutlets = async () => {
+    try {
+      const response = await ApiService.get('/outlets', {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching outlets:', error);
+      throw error;
+    }
+  };
 
-  const availableOutlets = outlets.filter(outlet => outlet.status !== 'Blocked');
-  const selectedOutlet = outlets.find(o => o.id === formData.outletId);
+
+  const fetchInventoryList = async (storeId = 1) => {
+    try {
+      const response = await ApiService.get(`/inventory/store/${storeId}`, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching inventory list:', error);
+      throw error;
+    }
+  };
+  const createInvoice = async (outletId, invoiceData) => {
+    try {
+      const response = await ApiService.post(`/stores/1/outlets/${outletId}/invoices`, invoiceData, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      throw error;
+    }
+  };
+
+  // Fetch initial data
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [outletsData, inventoryData] = await Promise.all([
+          fetchOutlets(),
+          fetchInventoryList()
+        ]);
+
+        setOutlets(outletsData.outlets || []);
+        setInventory(inventoryData || []);
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+        alert('Failed to load data. Please refresh the page.');
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    fetchInitialData();
+  }, []);
+
+  const selectedOutlet = outlets.find(o => o.id === parseInt(formData.outletId));
 
   // Handle outlet change
   const handleOutletChange = (e) => {
@@ -38,6 +108,7 @@ const CreateInvoice = () => {
       outletId,
       items: [] // Reset items when outlet changes
     });
+    setErrors({});
   };
 
   // Handle form input changes
@@ -51,29 +122,38 @@ const CreateInvoice = () => {
 
   // Handle new item product selection
   const handleProductSelect = (e) => {
-    const productId = e.target.value;
-    if (!productId) {
-      setNewItem({ productId: '', quantity: 1, price: 0 });
+    const inventoryId = e.target.value;
+
+    if (!inventoryId) {
+      setNewItem({
+        productId: '',
+        inventoryId: '',
+        quantity: 1,
+        price: 0
+      });
       return;
     }
-    
-    const product = inventory.find(p => p.id === productId);
-    setNewItem({
-      productId,
-      quantity: 1,
-      price: product.price
-    });
-  };
 
+    const product = inventory.find(p => p.id === Number(inventoryId));
+
+    if (product) {
+      setNewItem({
+        productId: product.productId,
+        inventoryId: product.id,
+        quantity: 1,
+        price: parseFloat(product.Product?.price) || 0
+      });
+    }
+  };
   // Handle new item quantity change
   const handleQuantityChange = (e) => {
     const quantity = parseInt(e.target.value) || 1;
-    const product = inventory.find(p => p.id === newItem.productId);
-    
-    if (product) {
+    const inventoryItem = inventory.find(p => p.productId === newItem.productId);
+
+    if (inventoryItem) {
       setNewItem({
         ...newItem,
-        quantity: Math.min(Math.max(1, quantity), product.quantity)
+        quantity: Math.min(Math.max(1, quantity), inventoryItem.quantity)
       });
     }
   };
@@ -86,8 +166,9 @@ const CreateInvoice = () => {
       return;
     }
 
-    const product = inventory.find(p => p.id === newItem.productId);
-    
+    const inventoryItem = inventory.find(p => p.productId === newItem.productId);
+    const product = inventoryItem?.Product;
+
     // Check if product already exists in items
     const existingItemIndex = formData.items.findIndex(
       item => item.productId === newItem.productId
@@ -98,17 +179,17 @@ const CreateInvoice = () => {
       const updatedItems = [...formData.items];
       const currentQuantity = updatedItems[existingItemIndex].quantity;
       const newQuantity = currentQuantity + newItem.quantity;
-      
-      if (newQuantity > product.quantity) {
-        alert(`Cannot add ${newItem.quantity} more. Only ${product.quantity - currentQuantity} available.`);
+
+      if (newQuantity > inventoryItem.quantity) {
+        alert(`Cannot add ${newItem.quantity} more. Only ${inventoryItem.quantity - currentQuantity} available.`);
         return;
       }
-      
+
       updatedItems[existingItemIndex] = {
         ...updatedItems[existingItemIndex],
         quantity: newQuantity
       };
-      
+
       setFormData({
         ...formData,
         items: updatedItems
@@ -120,14 +201,15 @@ const CreateInvoice = () => {
         items: [
           ...formData.items,
           {
-            productId: product.id,
-            productName: product.name,
-            sku: product.sku,
-            price: product.price,
+            productId: newItem.productId,
+            productName: product?.name || 'Unknown Product',
+            sku: product?.sku || 'N/A',
+            price: newItem.price,
+            id: newItem.inventoryId,
             quantity: newItem.quantity,
-            available: product.quantity,
-            unit: product.unit || 'pcs',
-            category: product.category
+            available: inventoryItem.quantity,
+            unit: 'units',
+            category: product?.Category?.name || 'Uncategorized'
           }
         ]
       });
@@ -137,25 +219,31 @@ const CreateInvoice = () => {
     setNewItem({
       productId: '',
       quantity: 1,
+      inventoryId: '',
       price: 0
     });
+
+    // Clear any items errors
+    if (errors.items) {
+      setErrors({ ...errors, items: null });
+    }
   };
 
   // Update item quantity
   const updateItemQuantity = (index, newQuantity) => {
     const item = formData.items[index];
-    const product = inventory.find(p => p.id === item.productId);
-    
-    if (!product) return;
-    
-    newQuantity = Math.max(1, Math.min(newQuantity, product.quantity));
-    
+    const inventoryItem = inventory.find(p => p.productId === item.productId);
+
+    if (!inventoryItem) return;
+
+    newQuantity = Math.max(1, Math.min(newQuantity, inventoryItem.quantity));
+
     const updatedItems = [...formData.items];
     updatedItems[index] = {
       ...updatedItems[index],
       quantity: newQuantity
     };
-    
+
     setFormData({
       ...formData,
       items: updatedItems
@@ -173,18 +261,13 @@ const CreateInvoice = () => {
 
   // Calculate totals
   const calculateSubtotal = () => {
-    return formData.items.reduce((total, item) => 
+    return formData.items.reduce((total, item) =>
       total + (item.price * item.quantity), 0
     );
   };
 
-  const calculateTax = () => {
-    // Assuming 10% tax
-    return calculateSubtotal() * 0.1;
-  };
-
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateTax();
+    return calculateSubtotal();
   };
 
   // Validate form
@@ -195,21 +278,16 @@ const CreateInvoice = () => {
       newErrors.outletId = 'Please select an outlet';
     }
 
-    if (!formData.invoiceDate) {
-      newErrors.invoiceDate = 'Please select invoice date';
-    }
-
     if (formData.items.length === 0) {
       newErrors.items = 'Please add at least one item';
     }
 
-    // Check credit limit if payment is Credit
-    if (formData.paymentMethod === 'Credit' && selectedOutlet) {
-      const totalAmount = calculateTotal();
-      const newDue = selectedOutlet.currentDue + totalAmount;
-      
-      if (newDue > selectedOutlet.creditLimit) {
-        newErrors.creditLimit = `Invoice total (${formatCurrency(totalAmount)}) will exceed credit limit of ${formatCurrency(selectedOutlet.creditLimit)}. Current due: ${formatCurrency(selectedOutlet.currentDue)}`;
+    // Check each item quantity against available stock
+    for (const item of formData.items) {
+      const inventoryItem = inventory.find(p => p.productId === item.productId);
+      if (inventoryItem && item.quantity > inventoryItem.quantity) {
+        newErrors.items = `Insufficient stock for ${item.productName}. Available: ${inventoryItem.quantity}`;
+        break;
       }
     }
 
@@ -220,7 +298,7 @@ const CreateInvoice = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -229,67 +307,52 @@ const CreateInvoice = () => {
 
     try {
       const totalAmount = calculateTotal();
-      const selectedOutletData = outlets.find(o => o.id === formData.outletId);
-
-      // Create invoice object
-      const newInvoice = {
-        outletId: formData.outletId,
-        outletName: selectedOutletData.name,
-        date: formData.invoiceDate,
-        subtotal: calculateSubtotal(),
-        tax: calculateTax(),
-        total: totalAmount,
-        status: 'Pending',
-        payment: formData.paymentMethod,
-        items: formData.items.map(item => ({
-          ...item,
-          total: item.price * item.quantity
-        })),
+      console.log("rrr::", formData.items)
+      // Prepare items for API
+      const items = formData.items.map(item => ({
+        productId: item.productId,
+        inventoryId: item.id,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      console.log("items:::", items)
+      // Create invoice
+      const response = await createInvoice(formData.outletId, {
+        paymentMethod: formData.paymentMethod,
         notes: formData.notes,
-        createdBy: localStorageManager.getManagerData()?.name || 'Manager',
-        createdAt: new Date().toISOString()
-      };
+        items: items,
+      });
 
-      // Save to localStorage
-      const addedInvoice = localStorageManager.addInvoice(newInvoice);
-      
-      // Update outlet due if credit
-      if (formData.paymentMethod === 'Credit') {
-        localStorageManager.updateOutletDue(formData.outletId, totalAmount);
+      if (response.message === 'Invoice created successfully') {
+        alert(`Invoice ${response.invoice.invoiceNumber} created successfully!`);
+
+        // Reset form
+        setFormData({
+          outletId: '',
+          paymentMethod: 'paid',
+          notes: '',
+          items: []
+        });
+
+        setNewItem({
+          productId: '',
+          quantity: 1,
+          inventoryId: '',
+          price: 0
+        });
+
+        setErrors({});
+
+        // Refresh inventory list to update stock counts
+        const updatedInventory = await fetchInventoryList();
+        setInventory(updatedInventory);
+      } else {
+        throw new Error('Failed to create invoice');
       }
 
-      // Update inventory quantities
-      formData.items.forEach(item => {
-        const product = inventory.find(p => p.id === item.productId);
-        if (product) {
-          localStorageManager.updateInventoryItem(item.productId, {
-            quantity: product.quantity - item.quantity
-          });
-        }
-      });
-
-      alert(`Invoice ${addedInvoice.id} created successfully!`);
-      
-      // Reset form
-      setFormData({
-        outletId: '',
-        invoiceDate: new Date().toISOString().split('T')[0],
-        paymentMethod: 'Credit',
-        notes: '',
-        items: []
-      });
-      
-      setNewItem({
-        productId: '',
-        quantity: 1,
-        price: 0
-      });
-      
-      setErrors({});
-      
     } catch (error) {
       console.error('Error creating invoice:', error);
-      alert('Failed to create invoice. Please try again.');
+      alert(error.message || 'Failed to create invoice. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -300,19 +363,30 @@ const CreateInvoice = () => {
     if (window.confirm('Are you sure you want to clear the form?')) {
       setFormData({
         outletId: '',
-        invoiceDate: new Date().toISOString().split('T')[0],
-        paymentMethod: 'Credit',
+        paymentMethod: 'paid',
         notes: '',
         items: []
       });
       setNewItem({
         productId: '',
         quantity: 1,
+        inventoryId: '',
         price: 0
       });
       setErrors({});
     }
   };
+
+  if (initialLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -329,7 +403,7 @@ const CreateInvoice = () => {
             {/* Outlet Information */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <h2 className="text-lg font-semibold mb-4 pb-2 border-b">Outlet Information</h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -342,9 +416,9 @@ const CreateInvoice = () => {
                     className={`input-field w-full ${errors.outletId ? 'border-red-500' : ''}`}
                   >
                     <option value="">-- Select an outlet --</option>
-                    {availableOutlets.map(outlet => (
+                    {outlets.map(outlet => (
                       <option key={outlet.id} value={outlet.id}>
-                        {outlet.name} - {outlet.type} (Credit: {formatCurrency(outlet.creditLimit)})
+                        {outlet.name} - {outlet.type} (Credit: {formatCurrency(parseFloat(outlet.creditLimit))})
                       </option>
                     ))}
                   </select>
@@ -353,47 +427,30 @@ const CreateInvoice = () => {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Invoice Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    name="invoiceDate"
-                    value={formData.invoiceDate}
-                    onChange={handleInputChange}
-                    className={`input-field w-full ${errors.invoiceDate ? 'border-red-500' : ''}`}
-                  />
-                  {errors.invoiceDate && (
-                    <p className="mt-1 text-sm text-red-500">{errors.invoiceDate}</p>
-                  )}
-                </div>
-
                 {selectedOutlet && (
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="font-medium mb-2">Outlet Credit Status</h3>
+                    <h3 className="font-medium mb-2">Outlet Details</h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
+                        <span className="text-gray-600">Contact Person:</span>
+                        <span className="ml-2 font-medium">{selectedOutlet.contactPerson || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Phone:</span>
+                        <span className="ml-2 font-medium">{selectedOutlet.phoneNumber || 'N/A'}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-600">Address:</span>
+                        <span className="ml-2 font-medium">{selectedOutlet.address || 'N/A'}</span>
+                      </div>
+                      <div>
                         <span className="text-gray-600">Credit Limit:</span>
-                        <span className="ml-2 font-medium">{formatCurrency(selectedOutlet.creditLimit)}</span>
+                        <span className="ml-2 font-medium text-green-600">{formatCurrency(parseFloat(selectedOutlet.creditLimit))}</span>
                       </div>
                       <div>
-                        <span className="text-gray-600">Current Due:</span>
-                        <span className="ml-2 font-medium text-orange-600">{formatCurrency(selectedOutlet.currentDue)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Available Credit:</span>
-                        <span className="ml-2 font-medium text-green-600">
-                          {formatCurrency(selectedOutlet.creditLimit - selectedOutlet.currentDue)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Status:</span>
-                        <span className={`ml-2 font-medium ${
-                          selectedOutlet.status === 'Active' ? 'text-green-600' :
-                          selectedOutlet.status === 'Warning' ? 'text-orange-600' : 'text-red-600'
-                        }`}>
-                          {selectedOutlet.status}
+                        <span className="text-gray-600">Current Credit:</span>
+                        <span className={`ml-2 font-medium ${parseFloat(selectedOutlet.currentCredit) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                          {formatCurrency(parseFloat(selectedOutlet.currentCredit))}
                         </span>
                       </div>
                     </div>
@@ -405,29 +462,30 @@ const CreateInvoice = () => {
             {/* Items Section */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <h2 className="text-lg font-semibold mb-4 pb-2 border-b">Invoice Items</h2>
-              
+
               {/* Add Item Form */}
               <div className="bg-gray-50 p-4 rounded-lg mb-6">
                 <h3 className="font-medium mb-3">Add New Item</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Product
+                    </label>
                     <select
-                      value={newItem.productId}
+                      value={newItem.inventoryId}
                       onChange={handleProductSelect}
                       className="input-field w-full"
                     >
                       <option value="">-- Select Product --</option>
                       {inventory
                         .filter(p => p.quantity > 0)
-                        .map(product => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} - {formatCurrency(product.price)} (Stock: {product.quantity})
+                        .map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.Product?.name} - {formatCurrency(parseFloat(item.Product?.price))} (Stock: {item.quantity})
                           </option>
                         ))}
                     </select>
                   </div>
-                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                     <input
@@ -439,7 +497,7 @@ const CreateInvoice = () => {
                       className="input-field w-full"
                     />
                   </div>
-                  
+
                   <div className="flex items-end">
                     <button
                       type="button"
@@ -452,10 +510,10 @@ const CreateInvoice = () => {
                     </button>
                   </div>
                 </div>
-                
+
                 {newItem.productId && (
                   <p className="mt-2 text-sm text-gray-600">
-                    Price: {formatCurrency(newItem.price)} | 
+                    Price: {formatCurrency(newItem.price)} |
                     Total: {formatCurrency(newItem.price * newItem.quantity)}
                   </p>
                 )}
@@ -543,7 +601,7 @@ const CreateInvoice = () => {
             {/* Additional Information */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <h2 className="text-lg font-semibold mb-4 pb-2 border-b">Additional Information</h2>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                 <textarea
@@ -562,7 +620,7 @@ const CreateInvoice = () => {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border p-6 sticky top-6">
               <h2 className="text-lg font-semibold mb-4 pb-2 border-b">Invoice Summary</h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -574,27 +632,16 @@ const CreateInvoice = () => {
                     onChange={handleInputChange}
                     className="input-field w-full"
                   >
-                    <option value="Credit">Credit</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Online">Online</option>
+                    <option value="paid">Paid</option>
+                    <option value="credit">Credit</option>
                   </select>
                 </div>
-
-                {errors.creditLimit && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <p className="text-sm text-red-600">{errors.creditLimit}</p>
-                  </div>
-                )}
 
                 <div className="border-t pt-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
                       <span>{formatCurrency(calculateSubtotal())}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Tax (10%):</span>
-                      <span>{formatCurrency(calculateTax())}</span>
                     </div>
                     <div className="flex justify-between text-lg font-bold pt-2 border-t">
                       <span>Total:</span>
@@ -638,7 +685,7 @@ const CreateInvoice = () => {
                       </>
                     )}
                   </button>
-                  
+
                   <button
                     type="button"
                     onClick={handleReset}

@@ -1,21 +1,12 @@
 // src/pages/Outlets.jsx
 import React, { useState, useEffect } from 'react';
-import { 
-  FiPlus, 
-  FiEdit2, 
-  FiTrash2, 
-  FiSearch,
-  FiFilter,
-  FiDownload,
-  FiX,
-  FiAlertCircle,
-  FiCheckCircle,
-  FiClock
-} from 'react-icons/fi';
-import { localStorageManager } from '../utils/localStorage';
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiFilter, FiX, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
+import ApiService from '../utils/ApiService';
 
 const Outlets = () => {
   const [outlets, setOutlets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -24,15 +15,33 @@ const Outlets = () => {
   const [selectedOutlet, setSelectedOutlet] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    location: '',
+    address: '',
     contactPerson: '',
-    phone: '',
-    email: '',
+    phoneNumber: '',
     creditLimit: 5000,
-    currentDue: 0,
-    status: 'Active'
+    type: 'custom'
   });
   const [errors, setErrors] = useState({});
+
+  const clientToken = localStorage.getItem('token');
+  const storeId = localStorage.getItem('storeId');
+  const userData = localStorage.getItem('user');
+  const userId=JSON.parse(userData).id;
+  console.log("userId",userId);
+  // Load outlets from API
+  const loadOutlets = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetchOutlets();
+      setOutlets(response.outlets || []);
+    } catch (err) {
+      console.error('Error loading outlets:', err);
+      setError('Failed to load outlets. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadOutlets();
@@ -49,11 +58,76 @@ const Outlets = () => {
     };
   }, []);
 
-  const loadOutlets = () => {
-    const data = localStorageManager.getOutlets();
-    setOutlets(data);
-  };
+  // Add to src/services/api.js
 
+// ============= OUTLET API ENDPOINTS =============
+
+// Fetch all outlets
+ const fetchOutlets = async () => {
+  try {
+    const response = await ApiService.get('/outlets',{storeId},{
+
+      headers: {
+        Authorization: `Bearer ${clientToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error('Error fetching outlets:', error);
+    throw error;
+  }
+};
+
+// Create a new outlet
+ const createOutlet = async (outletData) => {
+  try {
+    const response = await ApiService.post('/outlets', outletData,{
+      headers: {
+        Authorization: `Bearer ${clientToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error('Error creating outlet:', error);
+    throw error;
+  }
+};
+
+// Update an existing outlet
+ const updateOutlet = async (outletId, outletData) => {
+  try {
+    const response = await ApiService.put(`/outlets/${outletId}`, outletData,{
+
+      headers: {
+        Authorization: `Bearer ${clientToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error('Error updating outlet:', error);
+    throw error;
+  }
+};
+
+// Delete an outlet
+ const deleteOutlet = async (outletId) => {
+  try {
+    const response = await ApiService.put(`/outlets/${outletId}`, {isActive:false},{
+
+      headers: {
+        Authorization: `Bearer ${clientToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response;
+  } catch (error) {
+    console.error('Error updating outlet:', error);
+    throw error;
+  }
+};
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -69,67 +143,100 @@ const Outlets = () => {
   const validateForm = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Outlet name is required';
-    if (!formData.location.trim()) newErrors.location = 'Location is required';
+    if (!formData.address.trim()) newErrors.address = 'Address is required';
     if (!formData.contactPerson.trim()) newErrors.contactPerson = 'Contact person is required';
-    if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
-    if (!formData.email.trim()) newErrors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Email is invalid';
+    if (!formData.phoneNumber.trim()) newErrors.phoneNumber = 'Phone number is required';
     if (formData.creditLimit < 0) newErrors.creditLimit = 'Credit limit cannot be negative';
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleAddOutlet = () => {
+  const handleAddOutlet = async () => {
     if (!validateForm()) return;
 
-    const newOutlet = {
-      id: `OUT${String(outlets.length + 1).padStart(3, '0')}`,
-      ...formData,
-      creditLimit: Number(formData.creditLimit),
-      currentDue: Number(formData.currentDue),
-      dateAdded: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const outletData = {
+        name: formData.name,
+        address: formData.address,
+        contactPerson: formData.contactPerson,
+        phoneNumber: formData.phoneNumber,
+        creditLimit: formData.creditLimit,
+        managerId: userId,
+        storeId:storeId
+      };
 
-    const updatedOutlets = [...outlets, newOutlet];
-    localStorageManager.setOutlets(updatedOutlets);
-    setOutlets(updatedOutlets);
-    setShowAddModal(false);
-    resetForm();
+      const response = await createOutlet(outletData);
+      
+      if (response.message === 'Outlet created successfully') {
+        await loadOutlets(); // Refresh the list
+        setShowAddModal(false);
+        resetForm();
+      } else {
+        throw new Error('Failed to create outlet');
+      }
+    } catch (err) {
+      console.error('Error creating outlet:', err);
+      alert(err.message || 'Failed to create outlet. Please try again.');
+    }
   };
 
-  const handleEditOutlet = () => {
+  const handleEditOutlet = async () => {
     if (!validateForm()) return;
 
-    const updatedOutlets = outlets.map(outlet =>
-      outlet.id === selectedOutlet.id ? { ...outlet, ...formData } : outlet
-    );
-    
-    localStorageManager.setOutlets(updatedOutlets);
-    setOutlets(updatedOutlets);
-    setShowEditModal(false);
-    setSelectedOutlet(null);
-    resetForm();
+    try {
+      const outletData = {
+        name: formData.name,
+        address: formData.address,
+        contactPerson: formData.contactPerson,
+        phoneNumber: formData.phoneNumber,
+        creditLimit: formData.creditLimit,
+        type: formData.type,
+        isActive: formData.isActive
+      };
+
+      const response = await updateOutlet(selectedOutlet.id, outletData);
+      
+      if (response.message === 'Outlet updated successfully') {
+        await loadOutlets(); // Refresh the list
+        setShowEditModal(false);
+        setSelectedOutlet(null);
+        resetForm();
+      } else {
+        throw new Error('Failed to update outlet');
+      }
+    } catch (err) {
+      console.error('Error updating outlet:', err);
+      alert(err.message || 'Failed to update outlet. Please try again.');
+    }
   };
 
-  const handleDeleteOutlet = () => {
-    const updatedOutlets = outlets.filter(outlet => outlet.id !== selectedOutlet.id);
-    localStorageManager.setOutlets(updatedOutlets);
-    setOutlets(updatedOutlets);
-    setShowDeleteModal(false);
-    setSelectedOutlet(null);
+  const handleDeleteOutlet = async () => {
+    try {
+      const response = await deleteOutlet(selectedOutlet.id);
+      
+      if (response.message === 'Outlet deleted successfully') {
+        await loadOutlets(); // Refresh the list
+        setShowDeleteModal(false);
+        setSelectedOutlet(null);
+      } else {
+        throw new Error('Failed to delete outlet');
+      }
+    } catch (err) {
+      console.error('Error deleting outlet:', err);
+      alert(err.message || 'Failed to delete outlet. Please try again.');
+    }
   };
 
   const resetForm = () => {
     setFormData({
       name: '',
-      location: '',
+      address: '',
       contactPerson: '',
-      phone: '',
-      email: '',
+      phoneNumber: '',
       creditLimit: 5000,
-      currentDue: 0,
-      status: 'Active'
+      type: 'custom',
+      isActive: true
     });
     setErrors({});
   };
@@ -138,13 +245,12 @@ const Outlets = () => {
     setSelectedOutlet(outlet);
     setFormData({
       name: outlet.name,
-      location: outlet.location,
+      address: outlet.address,
       contactPerson: outlet.contactPerson,
-      phone: outlet.phone,
-      email: outlet.email,
-      creditLimit: outlet.creditLimit,
-      currentDue: outlet.currentDue,
-      status: outlet.status
+      phoneNumber: outlet.phoneNumber,
+      creditLimit: parseFloat(outlet.creditLimit),
+      type: outlet.type,
+      isActive: outlet.isActive
     });
     setShowEditModal(true);
   };
@@ -154,47 +260,45 @@ const Outlets = () => {
     setShowDeleteModal(true);
   };
 
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'Active':
-        return 'bg-green-100 text-green-800';
-      case 'Warning':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Blocked':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  const getStatusColor = (isActive) => {
+    return isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
   };
 
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case 'Active':
-        return <FiCheckCircle className="inline mr-1" size={14} />;
-      case 'Warning':
-        return <FiAlertCircle className="inline mr-1" size={14} />;
-      case 'Blocked':
-        return <FiX className="inline mr-1" size={14} />;
-      default:
-        return null;
-    }
+  const getStatusIcon = (isActive) => {
+    return isActive ? <FiCheckCircle className="inline mr-1" size={14} /> : <FiX className="inline mr-1" size={14} />;
   };
 
   const filteredOutlets = outlets.filter(outlet => {
     const matchesSearch = 
       outlet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      outlet.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      outlet.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      outlet.phone.includes(searchTerm);
+      outlet.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (outlet.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (outlet.phoneNumber || '').includes(searchTerm);
     
-    const matchesStatus = filterStatus === 'All' || outlet.status === filterStatus;
+    const matchesStatus = filterStatus === 'All' || 
+      (filterStatus === 'Active' && outlet.isActive) ||
+      (filterStatus === 'Inactive' && !outlet.isActive);
     
     return matchesSearch && matchesStatus;
   });
 
-  const totalCredit = outlets.reduce((sum, outlet) => sum + outlet.currentDue, 0);
-  const activeOutlets = outlets.filter(o => o.status === 'Active').length;
-  const blockedOutlets = outlets.filter(o => o.status === 'Blocked').length;
+  const totalOutlets = outlets.length;
+  const activeOutlets = outlets.filter(o => o.isActive).length;
+  const inactiveOutlets = outlets.filter(o => !o.isActive).length;
+  const totalCredit = outlets.reduce((sum, outlet) => sum + parseFloat(outlet.currentCredit || 0), 0);
+
+  if (loading && outlets.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading outlets...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -208,15 +312,15 @@ const Outlets = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <p className="text-sm text-gray-600">Total Outlets</p>
-          <p className="text-2xl font-bold text-gray-800">{outlets.length}</p>
+          <p className="text-2xl font-bold text-gray-800">{totalOutlets}</p>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <p className="text-sm text-gray-600">Active Outlets</p>
           <p className="text-2xl font-bold text-green-600">{activeOutlets}</p>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-600">Blocked Outlets</p>
-          <p className="text-2xl font-bold text-red-600">{blockedOutlets}</p>
+          <p className="text-sm text-gray-600">Inactive Outlets</p>
+          <p className="text-2xl font-bold text-red-600">{inactiveOutlets}</p>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <p className="text-sm text-gray-600">Total Credit</p>
@@ -231,7 +335,7 @@ const Outlets = () => {
             <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search outlets by name, location, contact..."
+              placeholder="Search outlets by name, address, contact..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -248,8 +352,7 @@ const Outlets = () => {
               >
                 <option value="All">All Status</option>
                 <option value="Active">Active</option>
-                <option value="Warning">Warning</option>
-                <option value="Blocked">Blocked</option>
+                <option value="Inactive">Inactive</option>
               </select>
             </div>
             
@@ -271,11 +374,11 @@ const Outlets = () => {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outlet</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Person</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Credit Limit</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Due</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Credit</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -286,31 +389,31 @@ const Outlets = () => {
                   <tr key={outlet.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{outlet.name}</div>
-                      <div className="text-sm text-gray-500">{outlet.email}</div>
+                      <div className="text-sm text-gray-500">Type: {outlet.type}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      <div className="max-w-xs truncate">{outlet.address}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {outlet.location}
+                      {outlet.contactPerson || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {outlet.contactPerson}
+                      {outlet.phoneNumber || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {outlet.phone}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      ₹{outlet.creditLimit.toLocaleString()}
+                      ₹{parseFloat(outlet.creditLimit).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`text-sm font-medium ${
-                        outlet.currentDue > outlet.creditLimit ? 'text-red-600' : 'text-gray-700'
+                        parseFloat(outlet.currentCredit) > parseFloat(outlet.creditLimit) ? 'text-red-600' : 'text-gray-700'
                       }`}>
-                        ₹{outlet.currentDue.toLocaleString()}
+                        ₹{parseFloat(outlet.currentCredit || 0).toLocaleString()}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(outlet.status)}`}>
-                        {getStatusIcon(outlet.status)}
-                        {outlet.status}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(outlet.isActive)}`}>
+                        {getStatusIcon(outlet.isActive)}
+                        {outlet.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
@@ -336,8 +439,8 @@ const Outlets = () => {
               ) : (
                 <tr>
                   <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
-                    No outlets found
-                  </td>
+                    {searchTerm || filterStatus !== 'All' ? 'No outlets found matching your criteria' : 'No outlets available'}
+                   </td>
                 </tr>
               )}
             </tbody>
@@ -390,18 +493,18 @@ const Outlets = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Location *
+                        Address *
                       </label>
-                      <input
-                        type="text"
-                        name="location"
-                        value={formData.location}
+                      <textarea
+                        name="address"
+                        value={formData.address}
                         onChange={handleInputChange}
+                        rows="2"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.location ? 'border-red-500' : 'border-gray-300'
+                          errors.address ? 'border-red-500' : 'border-gray-300'
                         }`}
                       />
-                      {errors.location && <p className="mt-1 text-xs text-red-500">{errors.location}</p>}
+                      {errors.address && <p className="mt-1 text-xs text-red-500">{errors.address}</p>}
                     </div>
 
                     <div>
@@ -426,30 +529,14 @@ const Outlets = () => {
                       </label>
                       <input
                         type="tel"
-                        name="phone"
-                        value={formData.phone}
+                        name="phoneNumber"
+                        value={formData.phoneNumber}
                         onChange={handleInputChange}
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.phone ? 'border-red-500' : 'border-gray-300'
+                          errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
                         }`}
                       />
-                      {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email *
-                      </label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.email ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                      />
-                      {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
+                      {errors.phoneNumber && <p className="mt-1 text-xs text-red-500">{errors.phoneNumber}</p>}
                     </div>
 
                     <div>
@@ -472,32 +559,17 @@ const Outlets = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Current Due (₹)
-                      </label>
-                      <input
-                        type="number"
-                        name="currentDue"
-                        value={formData.currentDue}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="100"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Status
+                        Outlet Type
                       </label>
                       <select
-                        name="status"
-                        value={formData.status}
+                        name="type"
+                        value={formData.type}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       >
-                        <option value="Active">Active</option>
-                        <option value="Warning">Warning</option>
-                        <option value="Blocked">Blocked</option>
+                        <option value="custom">Custom</option>
+                        <option value="retail">Retail</option>
+                        <option value="wholesale">Wholesale</option>
                       </select>
                     </div>
                   </div>
@@ -555,7 +627,6 @@ const Outlets = () => {
 
                 <form onSubmit={(e) => { e.preventDefault(); handleEditOutlet(); }}>
                   <div className="space-y-4">
-                    {/* Same form fields as add modal */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Outlet Name *
@@ -574,18 +645,18 @@ const Outlets = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Location *
+                        Address *
                       </label>
-                      <input
-                        type="text"
-                        name="location"
-                        value={formData.location}
+                      <textarea
+                        name="address"
+                        value={formData.address}
                         onChange={handleInputChange}
+                        rows="2"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.location ? 'border-red-500' : 'border-gray-300'
+                          errors.address ? 'border-red-500' : 'border-gray-300'
                         }`}
                       />
-                      {errors.location && <p className="mt-1 text-xs text-red-500">{errors.location}</p>}
+                      {errors.address && <p className="mt-1 text-xs text-red-500">{errors.address}</p>}
                     </div>
 
                     <div>
@@ -610,30 +681,14 @@ const Outlets = () => {
                       </label>
                       <input
                         type="tel"
-                        name="phone"
-                        value={formData.phone}
+                        name="phoneNumber"
+                        value={formData.phoneNumber}
                         onChange={handleInputChange}
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.phone ? 'border-red-500' : 'border-gray-300'
+                          errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
                         }`}
                       />
-                      {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email *
-                      </label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.email ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                      />
-                      {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
+                      {errors.phoneNumber && <p className="mt-1 text-xs text-red-500">{errors.phoneNumber}</p>}
                     </div>
 
                     <div>
@@ -656,17 +711,18 @@ const Outlets = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Current Due (₹)
+                        Outlet Type
                       </label>
-                      <input
-                        type="number"
-                        name="currentDue"
-                        value={formData.currentDue}
+                      <select
+                        name="type"
+                        value={formData.type}
                         onChange={handleInputChange}
-                        min="0"
-                        step="100"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
+                      >
+                        <option value="custom">Custom</option>
+                        <option value="retail">Retail</option>
+                        <option value="wholesale">Wholesale</option>
+                      </select>
                     </div>
 
                     <div>
@@ -674,14 +730,13 @@ const Outlets = () => {
                         Status
                       </label>
                       <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
+                        name="isActive"
+                        value={formData.isActive}
+                        onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.value === 'true' }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       >
-                        <option value="Active">Active</option>
-                        <option value="Warning">Warning</option>
-                        <option value="Blocked">Blocked</option>
+                        <option value={true}>Active</option>
+                        <option value={false}>Inactive</option>
                       </select>
                     </div>
                   </div>
@@ -736,6 +791,11 @@ const Outlets = () => {
                       <p className="text-sm text-gray-500">
                         Are you sure you want to delete {selectedOutlet?.name}? This action cannot be undone.
                       </p>
+                      {parseFloat(selectedOutlet?.currentCredit) > 0 && (
+                        <p className="mt-2 text-sm text-red-600">
+                          Warning: This outlet has an outstanding credit of ₹{parseFloat(selectedOutlet?.currentCredit).toLocaleString()}.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

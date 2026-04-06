@@ -108,7 +108,7 @@ const InventoryTable = ({ inventory, onEdit }) => {
                 <td className="py-4 px-4">
                   <div>
                     <p className="font-medium">{item.name}</p>
-                    <p className="text-sm text-gray-600">ID: {item.id}</p>
+                    <p className="text-sm text-gray-600">ID: {item.productId || item.id}</p>
                   </div>
                 </td>
                 <td className="py-4 px-4">
