@@ -1,6 +1,6 @@
 // src/components/Dashboard/RecentInvoices.jsx
 import React from 'react';
-import { FiCheckCircle, FiClock, FiXCircle, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiCheckCircle,FiFileText, FiClock, FiXCircle, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { formatCurrency, getStatusColor } from '../../utils/helpers';
 import { useNavigate } from 'react-router-dom';
 
