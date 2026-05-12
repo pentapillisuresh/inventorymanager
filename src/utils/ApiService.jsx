@@ -16,7 +16,7 @@ const ApiService = (() => {
 
 const axiosInstance = axios.create({
   baseURL,
-  timeout: 1000000,
+  timeout: 1000000, 
 });
 
 // Interceptor for handling requests
