@@ -26,8 +26,8 @@ const Outlets = () => {
   const clientToken = localStorage.getItem('token');
   const storeId = localStorage.getItem('storeId');
   const userData = localStorage.getItem('user');
-  const userId=JSON.parse(userData).id;
-  console.log("userId",userId);
+  const userId = JSON.parse(userData).id;
+
   // Load outlets from API
   const loadOutlets = async () => {
     setLoading(true);
@@ -45,14 +45,14 @@ const Outlets = () => {
 
   useEffect(() => {
     loadOutlets();
-    
+
     // Listen for add outlet event from sidebar
     const handleOpenAddModal = () => {
       setShowAddModal(true);
     };
-    
+
     window.addEventListener('openAddOutletModal', handleOpenAddModal);
-    
+
     return () => {
       window.removeEventListener('openAddOutletModal', handleOpenAddModal);
     };
@@ -60,74 +60,76 @@ const Outlets = () => {
 
   // Add to src/services/api.js
 
-// ============= OUTLET API ENDPOINTS =============
+  // ============= OUTLET API ENDPOINTS =============
 
-// Fetch all outlets
- const fetchOutlets = async () => {
-  try {
-    const response = await ApiService.get('/outlets',{storeId},{
+  // Fetch all outlets
+  const fetchOutlets = async () => {
+    try {
+      console.log("clientToken:::", clientToken);
+  
+      const response = await ApiService.get('/outlets', {
+        params: { storeId },
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+  
+      return response;
+    } catch (error) {
+      console.error('Error fetching outlets:', error);
+      throw error;
+    }
+  };
+  // Create a new outlet
+  const createOutlet = async (outletData) => {
+    try {
+      const response = await ApiService.post('/outlets', outletData, {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error creating outlet:', error);
+      throw error;
+    }
+  };
 
-      headers: {
-        Authorization: `Bearer ${clientToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    return response;
-  } catch (error) {
-    console.error('Error fetching outlets:', error);
-    throw error;
-  }
-};
+  // Update an existing outlet
+  const updateOutlet = async (outletId, outletData) => {
+    try {
+      const response = await ApiService.put(`/outlets/${outletId}`, outletData, {
 
-// Create a new outlet
- const createOutlet = async (outletData) => {
-  try {
-    const response = await ApiService.post('/outlets', outletData,{
-      headers: {
-        Authorization: `Bearer ${clientToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    return response;
-  } catch (error) {
-    console.error('Error creating outlet:', error);
-    throw error;
-  }
-};
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating outlet:', error);
+      throw error;
+    }
+  };
 
-// Update an existing outlet
- const updateOutlet = async (outletId, outletData) => {
-  try {
-    const response = await ApiService.put(`/outlets/${outletId}`, outletData,{
+  // Delete an outlet
+  const deleteOutlet = async (outletId) => {
+    try {
+      const response = await ApiService.put(`/outlets/${outletId}`, { isActive: false }, {
 
-      headers: {
-        Authorization: `Bearer ${clientToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    return response;
-  } catch (error) {
-    console.error('Error updating outlet:', error);
-    throw error;
-  }
-};
-
-// Delete an outlet
- const deleteOutlet = async (outletId) => {
-  try {
-    const response = await ApiService.put(`/outlets/${outletId}`, {isActive:false},{
-
-      headers: {
-        Authorization: `Bearer ${clientToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    return response;
-  } catch (error) {
-    console.error('Error updating outlet:', error);
-    throw error;
-  }
-};
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating outlet:', error);
+      throw error;
+    }
+  };
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -147,7 +149,7 @@ const Outlets = () => {
     if (!formData.contactPerson.trim()) newErrors.contactPerson = 'Contact person is required';
     if (!formData.phoneNumber.trim()) newErrors.phoneNumber = 'Phone number is required';
     if (formData.creditLimit < 0) newErrors.creditLimit = 'Credit limit cannot be negative';
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -163,11 +165,11 @@ const Outlets = () => {
         phoneNumber: formData.phoneNumber,
         creditLimit: formData.creditLimit,
         managerId: userId,
-        storeId:storeId
+        storeId: storeId
       };
 
       const response = await createOutlet(outletData);
-      
+
       if (response.message === 'Outlet created successfully') {
         await loadOutlets(); // Refresh the list
         setShowAddModal(false);
@@ -196,7 +198,7 @@ const Outlets = () => {
       };
 
       const response = await updateOutlet(selectedOutlet.id, outletData);
-      
+
       if (response.message === 'Outlet updated successfully') {
         await loadOutlets(); // Refresh the list
         setShowEditModal(false);
@@ -214,7 +216,7 @@ const Outlets = () => {
   const handleDeleteOutlet = async () => {
     try {
       const response = await deleteOutlet(selectedOutlet.id);
-      
+
       if (response.message === 'Outlet deleted successfully') {
         await loadOutlets(); // Refresh the list
         setShowDeleteModal(false);
@@ -269,16 +271,16 @@ const Outlets = () => {
   };
 
   const filteredOutlets = outlets.filter(outlet => {
-    const matchesSearch = 
+    const matchesSearch =
       outlet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       outlet.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (outlet.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (outlet.phoneNumber || '').includes(searchTerm);
-    
-    const matchesStatus = filterStatus === 'All' || 
+
+    const matchesStatus = filterStatus === 'All' ||
       (filterStatus === 'Active' && outlet.isActive) ||
       (filterStatus === 'Inactive' && !outlet.isActive);
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -341,7 +343,7 @@ const Outlets = () => {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
-          
+
           <div className="flex items-center gap-3">
             <div className="relative">
               <FiFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -355,7 +357,7 @@ const Outlets = () => {
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
-            
+
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -404,9 +406,8 @@ const Outlets = () => {
                       ₹{parseFloat(outlet.creditLimit).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-sm font-medium ${
-                        parseFloat(outlet.currentCredit) > parseFloat(outlet.creditLimit) ? 'text-red-600' : 'text-gray-700'
-                      }`}>
+                      <span className={`text-sm font-medium ${parseFloat(outlet.currentCredit) > parseFloat(outlet.creditLimit) ? 'text-red-600' : 'text-gray-700'
+                        }`}>
                         ₹{parseFloat(outlet.currentCredit || 0).toLocaleString()}
                       </span>
                     </td>
@@ -440,7 +441,7 @@ const Outlets = () => {
                 <tr>
                   <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                     {searchTerm || filterStatus !== 'All' ? 'No outlets found matching your criteria' : 'No outlets available'}
-                   </td>
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -484,9 +485,8 @@ const Outlets = () => {
                         name="name"
                         value={formData.name}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.name ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                     </div>
@@ -500,9 +500,8 @@ const Outlets = () => {
                         value={formData.address}
                         onChange={handleInputChange}
                         rows="2"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.address ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.address ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.address && <p className="mt-1 text-xs text-red-500">{errors.address}</p>}
                     </div>
@@ -516,9 +515,8 @@ const Outlets = () => {
                         name="contactPerson"
                         value={formData.contactPerson}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.contactPerson ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.contactPerson ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.contactPerson && <p className="mt-1 text-xs text-red-500">{errors.contactPerson}</p>}
                     </div>
@@ -532,9 +530,8 @@ const Outlets = () => {
                         name="phoneNumber"
                         value={formData.phoneNumber}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.phoneNumber && <p className="mt-1 text-xs text-red-500">{errors.phoneNumber}</p>}
                     </div>
@@ -550,9 +547,8 @@ const Outlets = () => {
                         onChange={handleInputChange}
                         min="0"
                         step="1000"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.creditLimit ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.creditLimit ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.creditLimit && <p className="mt-1 text-xs text-red-500">{errors.creditLimit}</p>}
                     </div>
@@ -636,9 +632,8 @@ const Outlets = () => {
                         name="name"
                         value={formData.name}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.name ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                     </div>
@@ -652,9 +647,8 @@ const Outlets = () => {
                         value={formData.address}
                         onChange={handleInputChange}
                         rows="2"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.address ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.address ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.address && <p className="mt-1 text-xs text-red-500">{errors.address}</p>}
                     </div>
@@ -668,9 +662,8 @@ const Outlets = () => {
                         name="contactPerson"
                         value={formData.contactPerson}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.contactPerson ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.contactPerson ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.contactPerson && <p className="mt-1 text-xs text-red-500">{errors.contactPerson}</p>}
                     </div>
@@ -684,9 +677,8 @@ const Outlets = () => {
                         name="phoneNumber"
                         value={formData.phoneNumber}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.phoneNumber && <p className="mt-1 text-xs text-red-500">{errors.phoneNumber}</p>}
                     </div>
@@ -702,9 +694,8 @@ const Outlets = () => {
                         onChange={handleInputChange}
                         min="0"
                         step="1000"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          errors.creditLimit ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${errors.creditLimit ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       />
                       {errors.creditLimit && <p className="mt-1 text-xs text-red-500">{errors.creditLimit}</p>}
                     </div>

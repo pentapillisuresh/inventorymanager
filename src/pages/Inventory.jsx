@@ -87,6 +87,7 @@ const Inventory = () => {
     productId: item.productId,
     name: item.Product?.name || 'Unknown Product',
     sku: item.Product?.sku || 'N/A',
+    HSN_No: item.Product?.HSN_No || 'N/A',
     category: item.Product?.Category?.name || 'Uncategorized',
     quantity: item.quantity,
     unit: 'units',
@@ -301,6 +302,7 @@ const Inventory = () => {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Product</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">HSN_No</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">SKU</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Current Stock</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Min Required</th>
@@ -327,6 +329,11 @@ const Inventory = () => {
                                   <p className="font-medium">{item.name}</p>
                                   <p className="text-sm text-gray-600">{item.category}</p>
                                 </div>
+                              </td>
+                              <td className="py-4 px-4">
+                                <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                  {item.HSN_No}
+                                </span>
                               </td>
                               <td className="py-4 px-4">
                                 <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">

@@ -33,7 +33,6 @@ const Dashboard = () => {
     try {
       // Fetch inventory summary for stats
       const summaryData = await fetchInventorySummary(storeId);
-      console.log("rrr::",summaryData)
       // Transform API response to match StatsCards expected format
       setStats({
         totalItems: summaryData.totalItems || 0,

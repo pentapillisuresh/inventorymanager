@@ -1,21 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FiHome, 
-  FiPackage, 
-  FiFileText, 
-  FiUsers, 
-  FiBarChart2, 
-  FiLogOut, 
-  FiMenu, 
-  FiX,
-  FiChevronRight,
-  FiPlusCircle,
-  FiShoppingBag,
-  FiTruck,
-  FiDollarSign,
-  FiUserCheck,
-  FiSettings
-} from 'react-icons/fi';
+import {FiHome,FiPackage,FiFileText,FiUsers,FiBarChart2,FiLogOut,FiMenu,FiXFiChevronRightFiPlusCircleFiShoppingBagFiTruckFiDollarSignFiUserCheckFiSettings} from 'react-icons/fi';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 
 const Sidebar = () => {
