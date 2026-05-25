@@ -11,8 +11,8 @@ export const initialAuthState = {
 
 const ApiService = (() => {
 
-  const baseURL = 'http://localhost:5001/api/'; // Or use a global variable or config import
-  // const baseURL = 'https://service.billmitra.org/api/'; // Or use a global variable or config import
+  // const baseURL = 'http://localhost:5001/api/'; // Or use a global variable or config import
+  const baseURL = 'https://service.billmitra.org/api/'; // Or use a global variable or config import
 
 const axiosInstance = axios.create({
   baseURL,

@@ -1,0 +1,38 @@
+{
+    "message": "Invoice created successfully",
+    "invoice": {
+        "creditAmount": 0,
+        "paidAmount": 18,
+        "invoiceDate": "2026-05-16T11:57:23.116Z",
+        "id": 18,
+        "invoiceNumber": "SALE-1778932643114-300",
+        "storeId": "1",
+        "batchID": "BATCH-16/05/26-7",
+        "outletId": "3",
+        "storeManagerId": 4,
+        "type": "outlet_sale",
+        "paymentMethod": "paid",
+        "totalAmount": 18,
+        "status": "completed",
+        "createdBy": 4,
+        "updatedAt": "2026-05-16T11:57:23.128Z",
+        "createdAt": "2026-05-16T11:57:23.116Z"
+    },
+    "invoiceItems": [
+        {
+            "id": 13,
+            "invoiceId": 18,
+            "batchId": "BATCH-16/05/26-7",
+            "productId": 2,
+            "quantity": 1,
+            "price": 18,
+            "boxName": "BOX-16/05/26-1",
+            "totalPrice": 18,
+            "locationType": "room",
+            "locationId": 1,
+            "createdBy": 4,
+            "updatedAt": "2026-05-16T11:57:23.123Z",
+            "createdAt": "2026-05-16T11:57:23.123Z"
+        }
+    ]
+}

@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
 import Invoices from './pages/Invoices';
 import Outlets from './pages/Outlets';
+import Expenditures from './pages/Expenditures';
 import Reports from './pages/Reports';
 import AddProduct from './pages/Product';
 import Login from './pages/Login';
@@ -33,6 +34,7 @@ function App() {
           <Route path="invoices/*" element={<Invoices />} />
           <Route path="add-product" element={<AddProduct />} />
           <Route path="outlets" element={<Outlets />} />
+          <Route path="Expenditures" element={<Expenditures />} />
           <Route path="reports" element={<Reports />} />
         </Route>
       </Routes>

@@ -1,6 +1,6 @@
 // src/components/Invoices/CreateInvoice.jsx
 import React, { useState, useEffect } from 'react';
-import { FiPlus, FiTrash2, FiCheck, FiX, FiSave } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiX, FiSave } from 'react-icons/fi';
 import { formatCurrency } from '../../utils/helpers';
 import ApiService from '../../utils/ApiService';
 
@@ -23,14 +23,29 @@ const CreateInvoice = () => {
     productId: '',
     quantity: 1,
     price: 0,
+    boxNumber: 1,
     inventoryId: ''
-
   });
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const clientToken = localStorage.getItem('token');
   const storeId = localStorage.getItem('storeId');
+
+  async function generateBatchNumber() {
+    const now = new Date();
+
+    // Format: dd/mm/yy
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+
+    const date = `${day}/${month}/${year}`;
+
+
+    return `${date}`;
+  }
+
   const fetchOutlets = async () => {
     try {
       const response = await ApiService.get('/outlets', {
@@ -46,7 +61,6 @@ const CreateInvoice = () => {
     }
   };
 
-
   const fetchInventoryList = async (storeId = 1) => {
     try {
       const response = await ApiService.get(`/inventory/store/${storeId}`, {
@@ -61,9 +75,10 @@ const CreateInvoice = () => {
       throw error;
     }
   };
+
   const createInvoice = async (outletId, invoiceData) => {
     try {
-      const response = await ApiService.post(`/stores/1/outlets/${outletId}/invoices`, invoiceData, {
+      const response = await ApiService.post(`/stores/${storeId}/outlets/${outletId}/invoices`, invoiceData, {
         headers: {
           Authorization: `Bearer ${clientToken}`,
           'Content-Type': 'application/json',
@@ -82,7 +97,7 @@ const CreateInvoice = () => {
       try {
         const [outletsData, inventoryData] = await Promise.all([
           fetchOutlets(),
-          fetchInventoryList()
+          fetchInventoryList(storeId)
         ]);
 
         setOutlets(outletsData.outlets || []);
@@ -120,6 +135,338 @@ const CreateInvoice = () => {
     });
   };
 
+  const showSuccessPopup = (distributionData) => {
+    console.log('Distribution Data:', distributionData);
+
+    // Extract invoice and items from response
+    const invoice = distributionData.invoice;
+    const invoiceItems = distributionData.invoiceItems || [];
+
+    // Calculate total amount
+    const totalAmount = parseFloat(invoice.totalAmount) || 0;
+    const paidAmount = parseFloat(invoice.paidAmount) || 0;
+    const creditAmount = parseFloat(invoice.creditAmount) || 0;
+
+    // Group products by boxName
+    const groupedBoxes = invoiceItems.reduce((acc, item) => {
+      const boxName = item.boxName || 'Unassigned';
+
+      if (!acc[boxName]) {
+        acc[boxName] = {
+          products: [],
+          total: 0
+        };
+      }
+
+      // Calculate item total
+      const itemTotal = parseFloat(item.totalPrice) || 0;
+
+      acc[boxName].products.push({
+        productName: item.Product?.name || 'Unknown Product',
+        quantity: item.quantity,
+        price: parseFloat(item.price) || 0,
+        total: itemTotal,
+        batchId: item.batchId,
+        hsnNo: item.Product?.HSN_No || 'N/A'
+      });
+
+      acc[boxName].total += itemTotal;
+
+      return acc;
+    }, {});
+
+    // Create popup
+    const popupDiv = document.createElement('div');
+    popupDiv.className =
+      'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60] overflow-y-auto';
+
+    popupDiv.innerHTML = `
+      <div class="bg-white rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+        
+        <!-- Header -->
+        <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center z-10">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-green-600">
+              Invoice Created Successfully!
+            </h2>
+          </div>
+  
+          <button class="close-popup text-gray-400 hover:text-gray-600 text-2xl">
+            &times;
+          </button>
+        </div>
+  
+        <div class="p-6">
+  
+          <!-- Invoice Summary -->
+          <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5 mb-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <p class="text-sm text-gray-600">Invoice Number</p>
+                <p class="text-2xl font-bold text-blue-800 font-mono">
+                  ${invoice.invoiceNumber || 'N/A'}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                  Date: ${invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleString() : 'N/A'}
+                </p>
+              </div>
+  
+              <div class="text-right">
+                <p class="text-sm text-gray-600">Total Amount</p>
+                <p class="text-3xl font-bold text-green-600">
+                  ₹${totalAmount.toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
+  
+          <!-- Distribution Details -->
+          <div class="mb-6">
+            <h3 class="font-semibold text-gray-800 mb-3 border-b pb-2">
+              Invoice Details
+            </h3>
+  
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p class="text-gray-500">Type:</p>
+                <p class="font-medium capitalize">
+                  ${invoice.type === 'outlet_sale' ? 'Outlet Sale' : invoice.type || 'N/A'}
+                </p>
+              </div>
+  
+              <div>
+                <p class="text-gray-500">Payment Method:</p>
+                <p class="font-medium capitalize">
+                  ${invoice.paymentMethod || 'N/A'}
+                </p>
+              </div>
+  
+              <div>
+                <p class="text-gray-500">Status:</p>
+                <p class="font-medium">
+                  <span class="px-2 py-1 rounded-full text-xs ${invoice.status === 'completed'
+        ? 'bg-green-100 text-green-700'
+        : invoice.status === 'pending'
+          ? 'bg-yellow-100 text-yellow-700'
+          : 'bg-gray-100 text-gray-700'
+      }">
+                    ${invoice.status || 'N/A'}
+                  </span>
+                </p>
+              </div>
+  
+              <div>
+                <p class="text-gray-500">Batch ID:</p>
+                <p class="font-mono text-xs">
+                  ${invoice.batchID || 'N/A'}
+                </p>
+              </div>
+  
+              ${paidAmount > 0 ? `
+                <div>
+                  <p class="text-gray-500">Paid Amount:</p>
+                  <p class="font-medium text-green-600">
+                    ₹${paidAmount.toFixed(2)}
+                  </p>
+                </div>
+              ` : ''}
+  
+              ${creditAmount > 0 ? `
+                <div>
+                  <p class="text-gray-500">Credit Amount:</p>
+                  <p class="font-medium text-blue-600">
+                    ₹${creditAmount.toFixed(2)}
+                  </p>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+  
+          <!-- All Products Table -->
+          <div class="mb-8">
+            <h3 class="font-semibold text-gray-800 mb-3 border-b pb-2">
+              Products Distributed
+            </h3>
+  
+            <div class="overflow-x-auto border rounded-lg">
+              <table class="w-full text-sm">
+                
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">HSN</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qty</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Price</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                  </tr>
+                </thead>
+  
+                <tbody>
+                  ${invoiceItems.map((item) => `
+                    <tr class="border-t border-gray-200 hover:bg-gray-50">
+                      <td class="px-4 py-3">
+                        <div>
+                          <p class="font-medium">${item.Product?.name || 'Unknown'}</p>
+                          <p class="text-xs text-gray-500">SKU: ${item.Product?.sku || 'N/A'}</p>
+                        </div>
+                      </td>
+  
+                      <td class="px-4 py-3 text-center">
+                        ${item.Product?.HSN_No || 'N/A'}
+                      </td>
+  
+                      <td class="px-4 py-3 text-center">
+                        ${item.quantity}
+                      </td>
+  
+                      <td class="px-4 py-3 text-right">
+                        ₹${parseFloat(item.price).toFixed(2)}
+                      </td>
+  
+                      <td class="px-4 py-3">
+                        <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
+                          ${item.boxName || 'N/A'}
+                        </span>
+                      </td>
+  
+                      <td class="px-4 py-3 text-right font-medium">
+                        ₹${parseFloat(item.totalPrice).toFixed(2)}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+  
+                <tfoot class="bg-gray-50">
+                  <tr>
+                    <td colspan="5" class="px-4 py-3 text-right font-semibold">
+                      Grand Total:
+                    </td>
+  
+                    <td class="px-4 py-3 text-right font-bold text-green-700">
+                      ₹${totalAmount.toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+  
+              </table>
+            </div>
+          </div>
+  
+          <!-- BOXES SECTION - Grouped by Box -->
+          ${Object.keys(groupedBoxes).length > 0 ? `
+            <div class="mb-6">
+              <h3 class="font-bold text-xl text-gray-800 mb-4 border-b pb-2">
+                📦 Box Wise Distribution
+              </h3>
+  
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+  
+                ${Object.entries(groupedBoxes).map(([boxName, boxData]) => `
+                  <div class="border border-gray-200 rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <!-- Box Header -->
+                    <div class="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-4 py-3">
+                      <div class="flex justify-between items-center">
+                        <div>
+                          <p class="text-xs opacity-80">Box Name</p>
+                          <h4 class="font-semibold text-base font-mono">
+                            ${boxName}
+                          </h4>
+                        </div>
+                        <div class="text-right">
+                          <p class="text-xs opacity-80">Total Items</p>
+                          <p class="font-bold text-lg">
+                            ${boxData.products.length}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+  
+                    <!-- Products in Box -->
+                    <div class="p-4">
+                      <table class="w-full text-sm">
+                        <thead>
+                          <tr class="border-b border-gray-200">
+                            <th class="text-left py-2 text-xs font-medium text-gray-500">Product</th>
+                            <th class="text-center py-2 text-xs font-medium text-gray-500">Qty</th>
+                            <th class="text-right py-2 text-xs font-medium text-gray-500">Price</th>
+                            <th class="text-right py-2 text-xs font-medium text-gray-500">Amount</th>
+                          </tr>
+                        </thead>
+  
+                        <tbody>
+                          ${boxData.products.map((product) => `
+                            <tr class="border-b border-gray-100">
+                              <td class="py-2 text-sm">
+                                ${product.productName}
+                                <div class="text-xs text-gray-400">HSN: ${product.hsnNo}</div>
+                              </td>
+                              <td class="py-2 text-sm text-center">
+                                ${product.quantity}
+                              </td>
+                              <td class="py-2 text-sm text-right">
+                                ₹${product.price.toFixed(2)}
+                              </td>
+                              <td class="py-2 text-sm text-right font-medium">
+                                ₹${product.total.toFixed(2)}
+                              </td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+  
+                        <tfoot>
+                          <tr>
+                            <td colspan="3" class="pt-3 text-right font-bold text-gray-700">
+                              Box Total:
+                            </td>
+                            <td class="pt-3 text-right font-bold text-indigo-700">
+                              ₹${boxData.total.toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                `).join('')}
+  
+              </div>
+            </div>
+          ` : ''}
+  
+          <!-- Footer -->
+          <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <button class="close-popup bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">
+              Close
+            </button>
+          </div>
+  
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(popupDiv);
+
+    // Close handlers
+    const closeButtons = popupDiv.querySelectorAll('.close-popup');
+
+    closeButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        popupDiv.remove();
+      });
+    });
+
+    // Outside click close
+    popupDiv.addEventListener('click', (e) => {
+      if (e.target === popupDiv) {
+        popupDiv.remove();
+      }
+    });
+  };
   // Handle new item product selection
   const handleProductSelect = (e) => {
     const inventoryId = e.target.value;
@@ -129,7 +476,8 @@ const CreateInvoice = () => {
         productId: '',
         inventoryId: '',
         quantity: 1,
-        price: 0
+        price: 0,
+        boxNumber: 1
       });
       return;
     }
@@ -141,33 +489,67 @@ const CreateInvoice = () => {
         productId: product.productId,
         inventoryId: product.id,
         quantity: 1,
-        price: parseFloat(product.Product?.price) || 0
+        price: parseFloat(product.Product?.price) || 0,
+        boxNumber: 1
       });
     }
   };
+
   // Handle new item quantity change
   const handleQuantityChange = (e) => {
     const quantity = parseInt(e.target.value) || 1;
-    const inventoryItem = inventory.find(p => p.productId === newItem.productId);
+    const inventoryItem = inventory.find(p => p.id === newItem.inventoryId);
 
     if (inventoryItem) {
+      const maxQuantity = inventoryItem.quantity;
       setNewItem({
         ...newItem,
-        quantity: Math.min(Math.max(1, quantity), inventoryItem.quantity)
+        quantity: Math.min(Math.max(1, quantity), maxQuantity)
       });
     }
   };
 
+  // Handle box number change for new item
+  const handleBoxNumberChange = (e) => {
+    const boxNumber = parseInt(e.target.value) || 1;
+    setNewItem({
+      ...newItem,
+      boxNumber: Math.max(1, boxNumber)
+    });
+  };
+
+  // Update item box number for existing items
+  const updateItemBoxNumber = async (index, newBoxNumber) => {
+    const item = formData.items[index];
+    const updatedItems = [...formData.items];
+
+    updatedItems[index] = {
+      ...updatedItems[index],
+      boxNumber: newBoxNumber,
+      boxName: `BOX-${await generateBatchNumber()}-${newBoxNumber}`
+    };
+
+    setFormData({
+      ...formData,
+      items: updatedItems
+    });
+  };
+
   // Add item to invoice
-  const addItemToInvoice = () => {
+  const addItemToInvoice = async () => {
     // Validate item
     if (!newItem.productId) {
       alert('Please select a product');
       return;
     }
 
-    const inventoryItem = inventory.find(p => p.productId === newItem.productId);
+    const inventoryItem = inventory.find(p => p.id === newItem.inventoryId);
     const product = inventoryItem?.Product;
+
+    if (!inventoryItem) {
+      alert('Product not found');
+      return;
+    }
 
     // Check if product already exists in items
     const existingItemIndex = formData.items.findIndex(
@@ -187,7 +569,9 @@ const CreateInvoice = () => {
 
       updatedItems[existingItemIndex] = {
         ...updatedItems[existingItemIndex],
-        quantity: newQuantity
+        quantity: newQuantity,
+        boxNumber: newItem.boxNumber,
+        boxName: `BOX-${await generateBatchNumber()}-${newItem.boxNumber}`
       };
 
       setFormData({
@@ -205,11 +589,13 @@ const CreateInvoice = () => {
             productName: product?.name || 'Unknown Product',
             sku: product?.sku || 'N/A',
             price: newItem.price,
-            id: newItem.inventoryId,
+            inventoryId: newItem.inventoryId,
             quantity: newItem.quantity,
             available: inventoryItem.quantity,
             unit: 'units',
-            category: product?.Category?.name || 'Uncategorized'
+            category: product?.Category?.name || 'Uncategorized',
+            boxNumber: newItem.boxNumber,
+            boxName: `BOX-${await generateBatchNumber()}-${newItem.boxNumber}`
           }
         ]
       });
@@ -220,7 +606,8 @@ const CreateInvoice = () => {
       productId: '',
       quantity: 1,
       inventoryId: '',
-      price: 0
+      price: 0,
+      boxNumber: 1
     });
 
     // Clear any items errors
@@ -229,10 +616,11 @@ const CreateInvoice = () => {
     }
   };
 
+
   // Update item quantity
   const updateItemQuantity = (index, newQuantity) => {
     const item = formData.items[index];
-    const inventoryItem = inventory.find(p => p.productId === item.productId);
+    const inventoryItem = inventory.find(p => p.id === item.inventoryId);
 
     if (!inventoryItem) return;
 
@@ -284,7 +672,7 @@ const CreateInvoice = () => {
 
     // Check each item quantity against available stock
     for (const item of formData.items) {
-      const inventoryItem = inventory.find(p => p.productId === item.productId);
+      const inventoryItem = inventory.find(p => p.id === item.inventoryId);
       if (inventoryItem && item.quantity > inventoryItem.quantity) {
         newErrors.items = `Insufficient stock for ${item.productName}. Available: ${inventoryItem.quantity}`;
         break;
@@ -306,16 +694,16 @@ const CreateInvoice = () => {
     setIsSubmitting(true);
 
     try {
-      const totalAmount = calculateTotal();
-      console.log("rrr::", formData.items)
       // Prepare items for API
       const items = formData.items.map(item => ({
         productId: item.productId,
-        inventoryId: item.id,
+        inventoryId: item.inventoryId,
         quantity: item.quantity,
-        price: item.price
+        price: item.price,
+        boxNumber: item.boxNumber,
+        boxName: item.boxName
       }));
-      console.log("items:::", items)
+
       // Create invoice
       const response = await createInvoice(formData.outletId, {
         paymentMethod: formData.paymentMethod,
@@ -325,7 +713,7 @@ const CreateInvoice = () => {
 
       if (response.message === 'Invoice created successfully') {
         alert(`Invoice ${response.invoice.invoiceNumber} created successfully!`);
-
+        const salePDF = response;
         // Reset form
         setFormData({
           outletId: '',
@@ -338,13 +726,14 @@ const CreateInvoice = () => {
           productId: '',
           quantity: 1,
           inventoryId: '',
-          price: 0
+          price: 0,
+          boxNumber: 1
         });
 
         setErrors({});
-
+        showSuccessPopup(salePDF)
         // Refresh inventory list to update stock counts
-        const updatedInventory = await fetchInventoryList();
+        const updatedInventory = await fetchInventoryList(storeId);
         setInventory(updatedInventory);
       } else {
         throw new Error('Failed to create invoice');
@@ -371,7 +760,8 @@ const CreateInvoice = () => {
         productId: '',
         quantity: 1,
         inventoryId: '',
-        price: 0
+        price: 0,
+        boxNumber: 1
       });
       setErrors({});
     }
@@ -466,7 +856,7 @@ const CreateInvoice = () => {
               {/* Add Item Form */}
               <div className="bg-gray-50 p-4 rounded-lg mb-6">
                 <h3 className="font-medium mb-3">Add New Item</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="md:col-span-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Product
@@ -497,7 +887,18 @@ const CreateInvoice = () => {
                       className="input-field w-full"
                     />
                   </div>
-
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Box Number</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newItem.boxNumber}
+                      onChange={handleBoxNumberChange}
+                      disabled={!newItem.productId}
+                      className="input-field w-full"
+                      placeholder="Box #"
+                    />
+                  </div>
                   <div className="flex items-end">
                     <button
                       type="button"
@@ -514,7 +915,8 @@ const CreateInvoice = () => {
                 {newItem.productId && (
                   <p className="mt-2 text-sm text-gray-600">
                     Price: {formatCurrency(newItem.price)} |
-                    Total: {formatCurrency(newItem.price * newItem.quantity)}
+                    Total: {formatCurrency(newItem.price * newItem.quantity)} |
+                    Box: {newItem.boxNumber}
                   </p>
                 )}
               </div>
@@ -528,6 +930,7 @@ const CreateInvoice = () => {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Box #</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                       </tr>
@@ -547,7 +950,7 @@ const CreateInvoice = () => {
                               <button
                                 type="button"
                                 onClick={() => updateItemQuantity(index, item.quantity - 1)}
-                                className="w-6 h-6 flex items-center justify-center border rounded"
+                                className="w-6 h-6 flex items-center justify-center border rounded hover:bg-gray-100"
                                 disabled={item.quantity <= 1}
                               >
                                 -
@@ -563,13 +966,24 @@ const CreateInvoice = () => {
                               <button
                                 type="button"
                                 onClick={() => updateItemQuantity(index, item.quantity + 1)}
-                                className="w-6 h-6 flex items-center justify-center border rounded"
+                                className="w-6 h-6 flex items-center justify-center border rounded hover:bg-gray-100"
                                 disabled={item.quantity >= item.available}
                               >
                                 +
                               </button>
                             </div>
+                            <p className="text-xs text-gray-500 mt-1">Available: {item.available}</p>
                           </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.boxNumber}
+                              onChange={(e) => updateItemBoxNumber(index, parseInt(e.target.value) || 1)}
+                              className="w-20 text-center border rounded py-1"
+                            />
+                          </td>
+
                           <td className="px-4 py-3 font-medium">
                             {formatCurrency(item.price * item.quantity)}
                           </td>
@@ -661,6 +1075,12 @@ const CreateInvoice = () => {
                       <span className="text-gray-600">Total Quantity:</span>
                       <span className="font-medium">
                         {formData.items.reduce((sum, item) => sum + item.quantity, 0)}
+                      </span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-600">Unique Boxes:</span>
+                      <span className="font-medium">
+                        {new Set(formData.items.map(item => item.boxNumber)).size}
                       </span>
                     </li>
                   </ul>

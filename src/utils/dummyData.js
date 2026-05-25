@@ -47,6 +47,23 @@ export const dummyInvoices = [
   { id: "INV005", outletId: "OUT004", outletName: "24/7 Convenience", date: "2024-03-11", total: 3800.00, status: "Approved", payment: "Credit", dueDate: "2024-03-25" },
 ];
 
+export const initialStores = [];
+
+export const initialOutlets = [];
+
+export const pendingApprovals = [];
+
+export const creditDues = [];
+
+export const stockAlerts = [];
+
+export const recentActivities = [];
+
+export const adminCredentials = {
+  username: "admin",
+  password: "admin123"
+};
+
 export const initialDummyData = {
   manager: dummyManagerData.manager,
   store: dummyManagerData.store,

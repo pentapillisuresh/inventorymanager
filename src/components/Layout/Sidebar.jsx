@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {FiHome,FiPackage,FiFileText,FiUsers,FiBarChart2,FiLogOut,FiMenu,FiXFiChevronRightFiPlusCircleFiShoppingBagFiTruckFiDollarSignFiUserCheckFiSettings} from 'react-icons/fi';
+import { FiHome, FiPackage, FiFileText, FiUsers, FiBarChart2, FiLogOut, FiMenu, FiX,FiChevronRight,FiPlusCircle,FiShoppingBag,FiTruck,FiDollarSign,FiUserCheck,FiSettings} from 'react-icons/fi';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 
 const Sidebar = () => {
@@ -94,7 +94,7 @@ const Sidebar = () => {
       requiredPermission: 'create_outlets'
     },
     { 
-      path: '/expenditures', 
+      path: '/Expenditures', 
       icon: FiDollarSign, 
       label: 'Expenditures',
       badge: null,
@@ -396,22 +396,6 @@ const Sidebar = () => {
                     text-gray-600 hover:bg-gray-100 hover:text-gray-900
                   `}
                 >
-                  <div className="flex items-center space-x-3">
-                    <FiPlusCircle size={20} />
-                    <span className={`
-                      text-sm font-medium transition-opacity duration-300
-                      ${!isOpen && 'lg:hidden'}
-                    `}>
-                      Add Product
-                    </span>
-                  </div>
-                  
-                  {/* Tooltip for collapsed state */}
-                  {!isOpen && (
-                    <span className="hidden lg:block absolute left-16 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                      Add Product
-                    </span>
-                  )}
                 </button>
               </li>
             )}
