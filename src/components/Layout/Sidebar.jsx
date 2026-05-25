@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FiHome, FiPackage, FiFileText, FiUsers, FiBarChart2, FiLogOut, FiMenu, FiX,FiChevronRight,FiPlusCircle,FiShoppingBag,FiTruck,FiDollarSign,FiUserCheck,FiSettings} from 'react-icons/fi';
+import { FiHome, FiPackage, FiFileText, FiUsers, FiBarChart2, FiLogOut, FiMenu, FiX, FiChevronRight, FiPlusCircle, FiShoppingBag, FiTruck, FiDollarSign, FiUserCheck, FiSettings } from 'react-icons/fi';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { FaRupeeSign } from 'react-icons/fa';
 
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -62,7 +63,7 @@ const Sidebar = () => {
     return () => window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
   }, []);
 
-  // Menu items with permission requirements
+  // Menu items with permission requirements - REMOVED FiDollarSign icon
   const menuItems = [
     { 
       path: '/', 
@@ -95,7 +96,7 @@ const Sidebar = () => {
     },
     { 
       path: '/Expenditures', 
-      icon: FiDollarSign, 
+    icon: FaRupeeSign,
       label: 'Expenditures',
       badge: null,
       requiredPermission: 'expenditure_management'
@@ -150,9 +151,16 @@ const Sidebar = () => {
     }
   };
 
+  // FIXED: Check if route is active - exact matching for dashboard
   const isActiveRoute = (path) => {
-    if (path === '/dashboard') {
-      return location.pathname === '/dashboard';
+    if (path === '/') {
+      // Dashboard should only be active on exact root path
+      return location.pathname === '/' || location.pathname === '/dashboard';
+    }
+    // For other routes, check if path starts with the menu path
+    // But exclude dashboard from this logic
+    if (location.pathname === '/' || location.pathname === '/dashboard') {
+      return false;
     }
     return location.pathname.startsWith(path);
   };
@@ -291,7 +299,7 @@ const Sidebar = () => {
                 </div>
               </div>
               
-              {/* User Details */}
+              {/* User Details - REMOVED any dollar symbols */}
               <div className="pt-2 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-gray-500">Role:</span>
@@ -346,6 +354,7 @@ const Sidebar = () => {
                   to={item.path}
                   onClick={closeSidebar}
                   className={({ isActive }) => {
+                    // FIXED: Use custom isActiveRoute for better route matching
                     const active = isActive || isActiveRoute(item.path);
                     return `
                       flex items-center ${isOpen ? 'justify-between' : 'justify-center lg:justify-center'} 
@@ -396,6 +405,7 @@ const Sidebar = () => {
                     text-gray-600 hover:bg-gray-100 hover:text-gray-900
                   `}
                 >
+                  {/* Add Product button content removed as requested */}
                 </button>
               </li>
             )}
@@ -443,7 +453,7 @@ const Sidebar = () => {
             )}
           </button>
           
-          {/* Version info */}
+          {/* Version info - REMOVED any dollar symbols */}
           <p className="text-xs text-center text-gray-400 mt-3">
             Version 1.0.0
           </p>

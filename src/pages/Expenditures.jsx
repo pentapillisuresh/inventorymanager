@@ -250,11 +250,11 @@ const Expenditures = ({ onLogout }) => {
                         />
                       </div>
 
-                      {/* Amount */}
+                      {/* Amount - Changed from $ to ₹ */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount *</label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
                           <input
                             type="number"
                             value={newExpense.amount}
@@ -354,9 +354,10 @@ const Expenditures = ({ onLogout }) => {
                       <p className="text-base font-semibold text-gray-900">{showDetails.description}</p>
                     </div>
                     
+                    {/* Amount section - Changed from $ to ₹ */}
                     <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-4">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Amount</label>
-                      <p className="text-2xl font-bold text-blue-700">${showDetails.amount.toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-blue-700">₹{showDetails.amount.toFixed(2)}</p>
                     </div>
                     
                     <div className="bg-gray-50 rounded-lg p-3">
@@ -429,17 +430,17 @@ const Expenditures = ({ onLogout }) => {
               </div>
             </div>
             
-            {/* Stats Cards */}
+            {/* Stats Cards - Changed from $ to ₹ */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
                 <div className="text-sm text-gray-600 mb-1">Total Expenses</div>
-                <div className="text-3xl font-bold text-gray-800">${stats.totalExpenses.toFixed(2)}</div>
+                <div className="text-3xl font-bold text-gray-800">₹{stats.totalExpenses.toFixed(2)}</div>
                 <div className="text-sm text-gray-500 mt-2">All time total</div>
               </div>
               
               <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-200 rounded-lg p-6">
                 <div className="text-sm text-gray-600 mb-1">Pending Approval</div>
-                <div className="text-3xl font-bold text-yellow-600">${stats.pendingAmount.toFixed(2)}</div>
+                <div className="text-3xl font-bold text-yellow-600">₹{stats.pendingAmount.toFixed(2)}</div>
                 <div className="text-sm text-gray-500 mt-2">{stats.pendingItems} items</div>
               </div>
               
@@ -497,7 +498,7 @@ const Expenditures = ({ onLogout }) => {
               </div>
             </div>
             
-            {/* Recent Expenses Table */}
+            {/* Recent Expenses Table - Changed from $ to ₹ */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -546,7 +547,7 @@ const Expenditures = ({ onLogout }) => {
                             <div className="text-sm text-gray-900">{expense.description}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-semibold text-gray-900">${expense.amount.toFixed(2)}</div>
+                            <div className="text-sm font-semibold text-gray-900">₹{expense.amount.toFixed(2)}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(expense.status)}`}>
