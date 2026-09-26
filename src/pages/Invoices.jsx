@@ -4,10 +4,20 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import InvoiceList from '../components/Invoices/InvoiceList';
 import CreateInvoice from '../components/Invoices/CreateInvoice';
 import { FiFileText, FiPlus, FiList, FiFile, FiDownload, FiEye } from 'react-icons/fi';
-import { FaBox, FaTruck, FaFilePdf, FaSpinner, FaChevronRight, FaDownload, FaPrint } from 'react-icons/fa';
+import {
+  FaBox,
+  FaTruck,
+  FaFilePdf,
+  FaSpinner,
+  FaChevronRight,
+  FaDownload,
+  FaPrint,
+  FaTimes
+} from 'react-icons/fa';
 import ApiService from '../utils/ApiService';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import ViewInvoiceDetails from './ViewInvoiceDetails';
 
 const Invoices = () => {
   const navigate = useNavigate();
@@ -25,7 +35,8 @@ const Invoices = () => {
     totalPages: 0,
     currentPage: 1
   });
-
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
   const clientToken = localStorage.getItem('token');
   const storeId = localStorage.getItem('storeId');
 
@@ -46,8 +57,8 @@ const Invoices = () => {
         params: { page, limit },
         headers: {
           Authorization: `Bearer ${clientToken}`,
-          'Content-Type': 'application/json',
-        },
+          'Content-Type': 'application/json'
+        }
       });
       return response;
     } catch (error) {
@@ -70,10 +81,10 @@ const Invoices = () => {
       const response = await ApiService.get(`/stores/${storeId}/waybills`, {
         headers: {
           Authorization: `Bearer ${clientToken}`,
-          'Content-Type': 'application/json',
-        },
+          'Content-Type': 'application/json'
+        }
       });
-      
+
       if (response.waybills) {
         setWaybills(response.waybills);
       }
@@ -89,7 +100,7 @@ const Invoices = () => {
   const fetchInvoicesData = async (page = 1) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await fetchStoreInvoices(page);
       setInvoices(response.invoices || []);
@@ -111,12 +122,14 @@ const Invoices = () => {
     if (activeTab === 'waybills') {
       fetchWaybills();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (activeTab === 'waybills') {
       fetchWaybills();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   // Group waybills by batchId
@@ -132,45 +145,40 @@ const Invoices = () => {
     batchId,
     items,
     totalAmount: items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0),
-    invoice: items[0]?.invoice || null, // Add invoice data from the first item in the batch
-    invoiceId: items[0]?.invoiceId, // Add invoice ID
-    invoiceNumber: items[0]?.invoice?.invoiceNumber, // Add invoice number
-    invoiceType: items[0]?.invoice?.type, // Add invoice type (distribution/outlet_sale)
-    totalBoxes: [...new Set(items.map(item => item.boxName))].length,
+    invoice: items[0]?.invoice || null,
+    invoiceId: items[0]?.invoiceId,
+    invoiceNumber: items[0]?.invoice?.invoiceNumber,
+    invoiceType: items[0]?.invoice?.type,
+    totalBoxes: [...new Set(items.map((item) => item.boxName))].length,
     totalProducts: items.length,
     createdAt: items[0]?.createdAt || new Date().toISOString()
-
   }));
 
   // Filter waybills by search term
-  const filteredBatches = batchArray.filter(batch =>
+  const filteredBatches = batchArray.filter((batch) =>
     batch.batchId.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Download Waybill PDF
   const downloadWaybillPDF = async (batchId, batchItems, batchTotal, batchInvoice) => {
     setIsDownloading(true);
-    
-    // Create a temporary div for PDF rendering
+
     const pdfContent = document.createElement('div');
     pdfContent.style.padding = '40px';
     pdfContent.style.backgroundColor = '#ffffff';
     pdfContent.style.fontFamily = 'Arial, sans-serif';
     pdfContent.style.maxWidth = '1000px';
     pdfContent.style.margin = '0 auto';
-    
-    // Determine From and To addresses based on invoice type
+
     const isDistribution = batchInvoice?.type === 'distribution';
-    
-    // From address (createdBy data - from batchInvoice.createdUser)
+
     const fromAddress = {
       name: batchInvoice?.createdUser?.name || 'N/A',
       address: batchInvoice?.createdUser?.officeAddress || 'N/A',
       phone: batchInvoice?.createdUser?.phoneNumber || 'N/A',
       email: batchInvoice?.createdUser?.email || 'N/A'
     };
-    
-    // To address (Store for distribution, Outlet for outlet_sale)
+
     let toAddress = {};
     if (isDistribution) {
       toAddress = {
@@ -185,8 +193,7 @@ const Invoices = () => {
         phone: batchInvoice?.Outlet?.phoneNumber || 'N/A'
       };
     }
-    
-    // Calculate box groupings
+
     const boxesInBatch = batchItems.reduce((acc, item) => {
       if (!acc[item.boxName]) {
         acc[item.boxName] = {
@@ -198,8 +205,7 @@ const Invoices = () => {
       acc[item.boxName].total += Number(item.totalPrice || 0);
       return acc;
     }, {});
-    
-    // Build HTML content with exact invoice format
+
     pdfContent.innerHTML = `
       <div style="border-bottom: 2px solid #2563eb; padding-bottom: 20px; margin-bottom: 20px;">
         <h1 style="text-align: center; color: #1e40af; margin: 0; font-size: 32px; font-weight: bold; text-transform: uppercase;">
@@ -209,10 +215,8 @@ const Invoices = () => {
           ${batchInvoice?.invoiceNumber || 'Invoice Number'} | ${new Date(batchInvoice?.createdAt).toLocaleDateString() || ''}
         </p>
       </div>
-  
-      <!-- From and To Address Section -->
+
       <div style="margin-bottom: 25px; display: flex; justify-content: space-between; gap: 20px;">
-        <!-- From Address -->
         <div style="flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; background: #f9fafb;">
           <h3 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #1e40af;">📤 FROM</h3>
           <p style="margin: 5px 0; font-weight: 600;">${fromAddress.name}</p>
@@ -220,8 +224,7 @@ const Invoices = () => {
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Phone: ${fromAddress.phone}</p>
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Email: ${fromAddress.email}</p>
         </div>
-        
-        <!-- To Address -->
+
         <div style="flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; background: #f9fafb;">
           <h3 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #1e40af;">📥 TO</h3>
           <p style="margin: 5px 0; font-weight: 600;">${toAddress.name}</p>
@@ -229,8 +232,7 @@ const Invoices = () => {
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Phone: ${toAddress.phone}</p>
         </div>
       </div>
-  
-      <!-- Batch Information -->
+
       <div style="margin-bottom: 25px; background: #f3f4f6; padding: 15px; border-radius: 8px;">
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
@@ -245,14 +247,15 @@ const Invoices = () => {
           </tr>
         </table>
       </div>
-  
-      ${Object.entries(boxesInBatch).map(([boxName, boxData], boxIndex) => `
-        <!-- Box ${boxIndex + 1} -->
+
+      ${Object.entries(boxesInBatch)
+        .map(
+          ([boxName, boxData], boxIndex) => `
         <div style="margin-bottom: 30px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
           <div style="background: #f8fafc; padding: 12px 15px; border-bottom: 2px solid #e2e8f0;">
             <h3 style="margin: 0; font-size: 16px; font-weight: bold; color: #1e293b;">📦 BOX: ${boxName}</h3>
           </div>
-          
+
           <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
             <thead>
               <tr style="background: #f1f5f9;">
@@ -262,10 +265,12 @@ const Invoices = () => {
                 <th style="padding: 10px; text-align: center; border: 1px solid #e2e8f0; font-weight: 600;">QTY</th>
                 <th style="padding: 10px; text-align: right; border: 1px solid #e2e8f0; font-weight: 600;">RATE (₹)</th>
                 <th style="padding: 10px; text-align: right; border: 1px solid #e2e8f0; font-weight: 600;">AMOUNT (₹)</th>
-               </tr>
+              </tr>
             </thead>
             <tbody>
-              ${boxData.items.map((item, idx) => `
+              ${boxData.items
+                .map(
+                  (item, idx) => `
                 <tr>
                   <td style="padding: 8px 10px; border: 1px solid #e2e8f0;">${idx + 1}</td>
                   <td style="padding: 8px 10px; border: 1px solid #e2e8f0;">${item.Product?.name || 'N/A'}</td>
@@ -274,7 +279,9 @@ const Invoices = () => {
                   <td style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right;">${parseFloat(item.price || 0).toLocaleString('en-IN')}</td>
                   <td style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-weight: 500;">${parseFloat(item.totalPrice || 0).toLocaleString('en-IN')}</td>
                 </tr>
-              `).join('')}
+              `
+                )
+                .join('')}
             </tbody>
             <tfoot>
               <tr style="background: #f8fafc;">
@@ -284,9 +291,10 @@ const Invoices = () => {
             </tfoot>
           </table>
         </div>
-      `).join('')}
-  
-      <!-- Summary Section -->
+      `
+        )
+        .join('')}
+
       <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
         <div style="width: 350px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
           <div style="display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
@@ -307,8 +315,7 @@ const Invoices = () => {
           </div>
         </div>
       </div>
-  
-      <!-- Payment Details -->
+
       <div style="margin-top: 25px; padding: 15px; background: #f8fafc; border-radius: 8px;">
         <h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold;">PAYMENT DETAILS</h4>
         <table style="width: 100%; font-size: 13px;">
@@ -319,8 +326,7 @@ const Invoices = () => {
           </tr>
         </table>
       </div>
-  
-      <!-- Signature Section -->
+
       <div style="margin-top: 40px; display: flex; justify-content: space-between;">
         <div style="width: 45%;">
           <p style="font-weight: 600; margin-bottom: 40px;">Receiver's Signature</p>
@@ -335,25 +341,24 @@ const Invoices = () => {
           <p style="margin-top: 5px; font-size: 11px; color: #6b7280;">Date: ${new Date().toLocaleDateString()}</p>
         </div>
       </div>
-  
-      <!-- Footer -->
+
       <div style="margin-top: 40px; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 15px; font-size: 10px; color: #9ca3af;">
         <p>This is a computer-generated waybill. Valid without signature.</p>
         <p>${fromAddress.name} - ${fromAddress.address} | Phone: ${fromAddress.phone}</p>
         <p>Generated on: ${new Date().toLocaleString()}</p>
       </div>
     `;
-    
+
     document.body.appendChild(pdfContent);
-    
+
     try {
       const canvas = await html2canvas(pdfContent, {
         scale: 2,
         backgroundColor: '#ffffff',
         logging: false,
-        useCORS: true,
+        useCORS: true
       });
-      
+
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const imgWidth = 210;
@@ -361,17 +366,17 @@ const Invoices = () => {
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       let heightLeft = imgHeight;
       let position = 0;
-      
+
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
-      
+
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
-      
+
       pdf.save(`Waybill_${batchId}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -381,9 +386,17 @@ const Invoices = () => {
       setIsDownloading(false);
     }
   };
-  
+
+  // ✅ FIXED: now opens the invoice popup correctly
   const handleViewInvoice = (invoice) => {
-    console.log('View invoice:', invoice);
+    // If invoice came with rawInvoice attached, use it; otherwise use the invoice itself
+    setSelectedInvoice(invoice?.rawInvoice || invoice);
+    setShowInvoiceModal(true);
+  };
+
+  const closeInvoiceModal = () => {
+    setShowInvoiceModal(false);
+    setSelectedInvoice(null);
   };
 
   // Three Tabs
@@ -446,32 +459,40 @@ const Invoices = () => {
         <div className="relative max-w-md">
           <input
             type="text"
-            placeholder={activeTab === 'list' ? "Search invoices..." : "Search waybills by Batch ID..."}
+            placeholder={activeTab === 'list' ? 'Search invoices...' : 'Search waybills by Batch ID...'}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
-          <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </div>
       )}
 
       {/* ALL INVOICES TAB */}
       {activeTab === 'list' && (
-        <InvoiceList 
+        <InvoiceList
           invoices={invoices}
           pagination={pagination}
           onPageChange={fetchInvoicesData}
-          onView={handleViewInvoice} 
+          onView={handleViewInvoice}
           loading={loading}
         />
       )}
 
       {/* CREATE INVOICE TAB */}
-      {activeTab === 'create' && (
-        <CreateInvoice />
-      )}
+      {activeTab === 'create' && <CreateInvoice />}
 
       {/* WAYBILLS TAB */}
       {activeTab === 'waybills' && (
@@ -522,7 +543,10 @@ const Invoices = () => {
                   }, {});
 
                   return (
-                    <div key={batch.batchId} className="border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-all overflow-hidden">
+                    <div
+                      key={batch.batchId}
+                      className="border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-all overflow-hidden"
+                    >
                       {/* Batch Header */}
                       <button
                         onClick={() => setOpenBatch(isOpen ? null : batch.batchId)}
@@ -530,7 +554,11 @@ const Invoices = () => {
                       >
                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <div className={`transform transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
+                            <div
+                              className={`transform transition-transform duration-200 ${
+                                isOpen ? 'rotate-90' : ''
+                              }`}
+                            >
                               <FaChevronRight className="text-white" size={16} />
                             </div>
                             <div className="text-left">
@@ -553,7 +581,9 @@ const Invoices = () => {
                             </div>
                             <div className="text-right">
                               <p className="text-xs opacity-80">Date</p>
-                              <p className="text-sm font-semibold">{new Date(batch.createdAt).toLocaleDateString()}</p>
+                              <p className="text-sm font-semibold">
+                                {new Date(batch.createdAt).toLocaleDateString()}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -564,12 +594,23 @@ const Invoices = () => {
                         <div className="p-5 bg-white">
                           {/* Download Button */}
                           <div className="flex justify-end mb-4">
-                            <button  
-                              onClick={() => downloadWaybillPDF(batch.batchId, batch.items, batch.totalAmount,batch.invoice)}
+                            <button
+                              onClick={() =>
+                                downloadWaybillPDF(
+                                  batch.batchId,
+                                  batch.items,
+                                  batch.totalAmount,
+                                  batch.invoice
+                                )
+                              }
                               disabled={isDownloading}
                               className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-5 py-2.5 rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all flex items-center gap-2 shadow-sm"
                             >
-                              {isDownloading ? <FaSpinner className="animate-spin" size={14} /> : <FaDownload size={14} />}
+                              {isDownloading ? (
+                                <FaSpinner className="animate-spin" size={14} />
+                              ) : (
+                                <FaDownload size={14} />
+                              )}
                               <span>Download Waybill PDF</span>
                             </button>
                           </div>
@@ -577,14 +618,19 @@ const Invoices = () => {
                           {/* Boxes Section */}
                           <div className="space-y-4">
                             {Object.entries(boxesInBatch).map(([boxName, boxData]) => (
-                              <div key={boxName} className="bg-gradient-to-r from-blue-50/30 to-purple-50/30 rounded-xl p-4 border border-blue-100">
+                              <div
+                                key={boxName}
+                                className="bg-gradient-to-r from-blue-50/30 to-purple-50/30 rounded-xl p-4 border border-blue-100"
+                              >
                                 <div className="flex justify-between items-center mb-3 pb-2 border-b border-blue-200">
                                   <h4 className="font-semibold text-gray-800 flex items-center gap-2">
                                     <FaBox className="text-blue-600" size={16} />
                                     Box: {boxName}
                                   </h4>
                                   <div className="text-right">
-                                    <p className="font-bold text-gray-800">{formatCurrency(boxData.total)}</p>
+                                    <p className="font-bold text-gray-800">
+                                      {formatCurrency(boxData.total)}
+                                    </p>
                                     <p className="text-xs text-gray-500">Box Total</p>
                                   </div>
                                 </div>
@@ -592,28 +638,55 @@ const Invoices = () => {
                                   <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                       <tr>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Product</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">HSN No.</th>
-                                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">Quantity</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Price/Unit</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Amount</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                                          Product
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                                          HSN No.
+                                        </th>
+                                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">
+                                          Quantity
+                                        </th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                                          Price/Unit
+                                        </th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                                          Amount
+                                        </th>
                                       </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
                                       {boxData.items.map((item, idx) => (
                                         <tr key={idx} className="hover:bg-gray-50">
-                                          <td className="px-3 py-2 text-sm text-gray-900 font-medium">{item.Product?.name || 'N/A'}</td>
-                                          <td className="px-3 py-2 text-sm text-gray-500">{item.Product?.HSN_No || 'N/A'}</td>
-                                          <td className="px-3 py-2 text-sm text-center text-gray-700">{item.quantity}</td>
-                                          <td className="px-3 py-2 text-sm text-right text-gray-700">{formatCurrency(item.price || 0)}</td>
-                                          <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">{formatCurrency(item.totalPrice || 0)}</td>
+                                          <td className="px-3 py-2 text-sm text-gray-900 font-medium">
+                                            {item.Product?.name || 'N/A'}
+                                          </td>
+                                          <td className="px-3 py-2 text-sm text-gray-500">
+                                            {item.Product?.HSN_No || 'N/A'}
+                                          </td>
+                                          <td className="px-3 py-2 text-sm text-center text-gray-700">
+                                            {item.quantity}
+                                          </td>
+                                          <td className="px-3 py-2 text-sm text-right text-gray-700">
+                                            {formatCurrency(item.price || 0)}
+                                          </td>
+                                          <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">
+                                            {formatCurrency(item.totalPrice || 0)}
+                                          </td>
                                         </tr>
                                       ))}
                                     </tbody>
                                     <tfoot className="bg-gray-50">
                                       <tr>
-                                        <td colSpan="4" className="px-3 py-2 text-right font-semibold text-gray-800">Box Total:</td>
-                                        <td className="px-3 py-2 text-right font-bold text-gray-900">{formatCurrency(boxData.total)}</td>
+                                        <td
+                                          colSpan="4"
+                                          className="px-3 py-2 text-right font-semibold text-gray-800"
+                                        >
+                                          Box Total:
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-bold text-gray-900">
+                                          {formatCurrency(boxData.total)}
+                                        </td>
                                       </tr>
                                     </tfoot>
                                   </table>
@@ -637,6 +710,27 @@ const Invoices = () => {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ✅ Invoice Details Popup */}
+      {showInvoiceModal && selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto relative shadow-2xl">
+            {/* Close button */}
+            <button
+              onClick={closeInvoiceModal}
+              className="absolute top-4 right-4 z-10 p-2 bg-white rounded-full text-gray-500 hover:text-gray-800 hover:bg-gray-100 shadow"
+              aria-label="Close"
+            >
+              <FaTimes size={20} />
+            </button>
+
+            {/* Invoice details component */}
+            <div className="p-4">
+              <ViewInvoiceDetails invoice={selectedInvoice} />
+            </div>
+          </div>
         </div>
       )}
     </div>
