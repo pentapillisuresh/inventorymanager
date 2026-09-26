@@ -132,9 +132,14 @@ const Invoices = () => {
     batchId,
     items,
     totalAmount: items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0),
+    invoice: items[0]?.invoice || null, // Add invoice data from the first item in the batch
+    invoiceId: items[0]?.invoiceId, // Add invoice ID
+    invoiceNumber: items[0]?.invoice?.invoiceNumber, // Add invoice number
+    invoiceType: items[0]?.invoice?.type, // Add invoice type (distribution/outlet_sale)
     totalBoxes: [...new Set(items.map(item => item.boxName))].length,
     totalProducts: items.length,
     createdAt: items[0]?.createdAt || new Date().toISOString()
+
   }));
 
   // Filter waybills by search term
@@ -143,184 +148,240 @@ const Invoices = () => {
   );
 
   // Download Waybill PDF
-  const downloadWaybillPDF = async (batchId, batchItems, batchTotal) => {
+  const downloadWaybillPDF = async (batchId, batchItems, batchTotal, batchInvoice) => {
     setIsDownloading(true);
     
-    const store = JSON.parse(localStorage.getItem('store') || '{}');
-    
+    // Create a temporary div for PDF rendering
     const pdfContent = document.createElement('div');
     pdfContent.style.padding = '40px';
     pdfContent.style.backgroundColor = '#ffffff';
     pdfContent.style.fontFamily = 'Arial, sans-serif';
-    pdfContent.style.maxWidth = '1200px';
+    pdfContent.style.maxWidth = '1000px';
     pdfContent.style.margin = '0 auto';
     
+    // Determine From and To addresses based on invoice type
+    const isDistribution = batchInvoice?.type === 'distribution';
+    
+    // From address (createdBy data - from batchInvoice.createdUser)
+    const fromAddress = {
+      name: batchInvoice?.createdUser?.name || 'N/A',
+      address: batchInvoice?.createdUser?.officeAddress || 'N/A',
+      phone: batchInvoice?.createdUser?.phoneNumber || 'N/A',
+      email: batchInvoice?.createdUser?.email || 'N/A'
+    };
+    
+    // To address (Store for distribution, Outlet for outlet_sale)
+    let toAddress = {};
+    if (isDistribution) {
+      toAddress = {
+        name: batchInvoice?.Store?.name || 'N/A',
+        address: batchInvoice?.Store?.address || 'N/A',
+        phone: batchInvoice?.Store?.phoneNumber || 'N/A'
+      };
+    } else {
+      toAddress = {
+        name: batchInvoice?.Outlet?.name || 'N/A',
+        address: batchInvoice?.Outlet?.address || 'N/A',
+        phone: batchInvoice?.Outlet?.phoneNumber || 'N/A'
+      };
+    }
+    
+    // Calculate box groupings
     const boxesInBatch = batchItems.reduce((acc, item) => {
       if (!acc[item.boxName]) {
-        acc[item.boxName] = { items: [], total: 0 };
+        acc[item.boxName] = {
+          items: [],
+          total: 0
+        };
       }
       acc[item.boxName].items.push(item);
       acc[item.boxName].total += Number(item.totalPrice || 0);
       return acc;
     }, {});
     
+    // Build HTML content with exact invoice format
     pdfContent.innerHTML = `
-      <div style="border-bottom: 2px solid #2563eb; padding-bottom: 20px;">
-        <h1 style="text-align: center; color: #1e40af; margin: 0; font-size: 28px; font-weight: bold; text-transform: uppercase;">
-          DISTRIBUTION WAYBILL
+      <div style="border-bottom: 2px solid #2563eb; padding-bottom: 20px; margin-bottom: 20px;">
+        <h1 style="text-align: center; color: #1e40af; margin: 0; font-size: 32px; font-weight: bold; text-transform: uppercase;">
+          ${isDistribution ? 'DISTRIBUTION' : 'OUTLET SALE'} WAYBILL
         </h1>
         <p style="text-align: center; color: #6b7280; margin-top: 8px; font-size: 14px;">
-          ${store?.name || 'Store Name'} - ${store?.address || ''}
+          ${batchInvoice?.invoiceNumber || 'Invoice Number'} | ${new Date(batchInvoice?.createdAt).toLocaleDateString() || ''}
         </p>
       </div>
-
-      <div style="border-bottom: 2px solid #d1d5db; padding-bottom: 16px; margin-top: 16px;">
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; font-size: 13px;">
-          <div>
-            <p><strong>Regd Office :</strong> ${store?.address || 'N/A'}</p>
-          </div>
-          <div>
-            <p><strong>FSSAI No :</strong> ${store?.FSSAI_No || 'N/A'}</p>
-            <p><strong>GST No :</strong> ${store?.GST_No || 'N/A'}</p>
-            <p><strong>CIN No :</strong> ${store?.CIN_No || 'N/A'}</p>
-          </div>
-          <div style="text-align: right;">
-            <p><strong>Waybill No :</strong> ${batchId}</p>
-            <p><strong>Waybill Date :</strong> ${new Date().toLocaleDateString()}</p>
-            <p><strong>Status :</strong> Completed</p>
-          </div>
+  
+      <!-- From and To Address Section -->
+      <div style="margin-bottom: 25px; display: flex; justify-content: space-between; gap: 20px;">
+        <!-- From Address -->
+        <div style="flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; background: #f9fafb;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #1e40af;">📤 FROM</h3>
+          <p style="margin: 5px 0; font-weight: 600;">${fromAddress.name}</p>
+          <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">${fromAddress.address}</p>
+          <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Phone: ${fromAddress.phone}</p>
+          <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Email: ${fromAddress.email}</p>
+        </div>
+        
+        <!-- To Address -->
+        <div style="flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; background: #f9fafb;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #1e40af;">📥 TO</h3>
+          <p style="margin: 5px 0; font-weight: 600;">${toAddress.name}</p>
+          <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">${toAddress.address}</p>
+          <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Phone: ${toAddress.phone}</p>
         </div>
       </div>
-
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; padding: 24px 0; border-bottom: 1px solid #d1d5db;">
-        <div>
-          <h3 style="font-weight: bold; margin-bottom: 12px; text-transform: uppercase;">BILL TO</h3>
-          <p><strong>${store?.name || 'N/A'}</strong></p>
-          <p>${store?.address || 'N/A'}</p>
-          <p>PHONE NO : ${store?.phoneNumber || 'N/A'}</p>
-          <p>EMAIL : ${store?.email || 'N/A'}</p>
-          <p>GST NO : ${store?.GST_No || 'N/A'}</p>
-        </div>
-        <div>
-          <h3 style="font-weight: bold; margin-bottom: 12px; text-transform: uppercase;">SHIP TO</h3>
-          <p><strong>${store?.name || 'N/A'}</strong></p>
-          <p>${store?.address || 'N/A'}</p>
-          <p>PHONE NO : ${store?.phoneNumber || 'N/A'}</p>
-          <p>EMAIL : ${store?.email || 'N/A'}</p>
-          <p>GST NO : ${store?.GST_No || 'N/A'}</p>
-        </div>
+  
+      <!-- Batch Information -->
+      <div style="margin-bottom: 25px; background: #f3f4f6; padding: 15px; border-radius: 8px;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px; width: 33%;"><strong>Batch ID:</strong> ${batchId}</td>
+            <td style="padding: 5px; width: 33%;"><strong>Invoice No:</strong> ${batchInvoice?.invoiceNumber || 'N/A'}</td>
+            <td style="padding: 5px; width: 33%;"><strong>Total Amount:</strong> ₹${batchTotal.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px;"><strong>Date:</strong> ${new Date(batchInvoice?.createdAt || new Date()).toLocaleString()}</td>
+            <td style="padding: 5px;"><strong>Type:</strong> ${isDistribution ? 'Distribution' : 'Outlet Sale'}</td>
+            <td style="padding: 5px;"></td>
+          </tr>
+        </table>
       </div>
-
+  
       ${Object.entries(boxesInBatch).map(([boxName, boxData], boxIndex) => `
-        <div style="margin-top: 24px;">
-          <h3 style="font-weight: bold; margin-bottom: 12px;">📦 BOX: ${boxName}</h3>
-          <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse; border: 1px solid #d1d5db; font-size: 13px;">
-              <thead>
-                <tr style="background: #f3f4f6;">
-                  <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">HSN_No</th>
-                  <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">SKU</th>
-                  <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Product</th>
-                  <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Qty</th>
-                  <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Rate</th>
-                  <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${boxData.items.map((item) => `
-                  <tr>
-                    <td style="border: 1px solid #d1d5db; padding: 6px 8px;">${item.Product?.HSN_No || 'N/A'}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 6px 8px;">${item.Product?.sku || 'N/A'}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 6px 8px;">${item.Product?.name || 'N/A'}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 6px 8px; text-align: right;">${item.quantity}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 6px 8px; text-align: right;">₹${parseFloat(item.price || 0).toFixed(2)}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 6px 8px; text-align: right;">₹${parseFloat(item.totalPrice || 0).toFixed(2)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-              <tfoot>
-                <tr style="background: #f9fafb;">
-                  <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold;">Box Total:</td>
-                  <td style="padding: 8px; text-align: right; font-weight: bold;">₹${boxData.total.toLocaleString('en-IN')}</td>
-                </tr>
-              </tfoot>
-            </table>
+        <!-- Box ${boxIndex + 1} -->
+        <div style="margin-bottom: 30px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <div style="background: #f8fafc; padding: 12px 15px; border-bottom: 2px solid #e2e8f0;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: bold; color: #1e293b;">📦 BOX: ${boxName}</h3>
           </div>
+          
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0; font-weight: 600;">SL NO</th>
+                <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0; font-weight: 600;">PRODUCT NAME</th>
+                <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0; font-weight: 600;">HSN CODE</th>
+                <th style="padding: 10px; text-align: center; border: 1px solid #e2e8f0; font-weight: 600;">QTY</th>
+                <th style="padding: 10px; text-align: right; border: 1px solid #e2e8f0; font-weight: 600;">RATE (₹)</th>
+                <th style="padding: 10px; text-align: right; border: 1px solid #e2e8f0; font-weight: 600;">AMOUNT (₹)</th>
+               </tr>
+            </thead>
+            <tbody>
+              ${boxData.items.map((item, idx) => `
+                <tr>
+                  <td style="padding: 8px 10px; border: 1px solid #e2e8f0;">${idx + 1}</td>
+                  <td style="padding: 8px 10px; border: 1px solid #e2e8f0;">${item.Product?.name || 'N/A'}</td>
+                  <td style="padding: 8px 10px; border: 1px solid #e2e8f0;">${item.Product?.HSN_No || 'N/A'}</td>
+                  <td style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: center;">${item.quantity}</td>
+                  <td style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right;">${parseFloat(item.price || 0).toLocaleString('en-IN')}</td>
+                  <td style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-weight: 500;">${parseFloat(item.totalPrice || 0).toLocaleString('en-IN')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="background: #f8fafc;">
+                <td colspan="5" style="padding: 10px; text-align: right; font-weight: bold; border: 1px solid #e2e8f0;">BOX TOTAL:</td>
+                <td style="padding: 10px; text-align: right; font-weight: bold; border: 1px solid #e2e8f0;">₹${boxData.total.toLocaleString('en-IN')}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       `).join('')}
-
-      <div style="display: flex; justify-content: flex-end; margin-top: 32px;">
-        <div style="width: 350px; border: 1px solid #d1d5db;">
-          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #d1d5db; padding: 8px 16px;">
-            <span>Total Gross Amount</span>
+  
+      <!-- Summary Section -->
+      <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+        <div style="width: 350px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
+            <span style="font-weight: 600;">Total Gross Amount</span>
             <span>₹${batchTotal.toLocaleString('en-IN')}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #d1d5db; padding: 8px 16px;">
-            <span>Add CGST 9%</span>
+          <div style="display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 1px solid #e5e7eb;">
+            <span style="font-weight: 600;">Add CGST (9%)</span>
             <span>₹${(batchTotal * 0.09).toLocaleString('en-IN')}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #d1d5db; padding: 8px 16px;">
-            <span>Add SGST 9%</span>
+          <div style="display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 1px solid #e5e7eb;">
+            <span style="font-weight: 600;">Add SGST (9%)</span>
             <span>₹${(batchTotal * 0.09).toLocaleString('en-IN')}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: 12px 16px; font-weight: bold; font-size: 18px; background: #f9fafb;">
-            <span>Total</span>
+          <div style="display: flex; justify-content: space-between; padding: 15px; background: #f0fdf4; font-weight: bold; font-size: 16px;">
+            <span>GRAND TOTAL</span>
             <span>₹${(batchTotal * 1.18).toLocaleString('en-IN')}</span>
           </div>
         </div>
       </div>
-
-      <div style="margin-top: 32px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px;">
-        <div>
-          <p style="font-weight: 500;">Customer Signature</p>
-          <div style="margin-top: 48px; border-bottom: 1px solid #9ca3af;"></div>
+  
+      <!-- Payment Details -->
+      <div style="margin-top: 25px; padding: 15px; background: #f8fafc; border-radius: 8px;">
+        <h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold;">PAYMENT DETAILS</h4>
+        <table style="width: 100%; font-size: 13px;">
+          <tr>
+            <td style="padding: 5px; width: 33%;"><strong>Payment Method:</strong> ${batchItems[0]?.paymentMethod || 'Paid'}</td>
+            <td style="padding: 5px; width: 33%;"><strong>Paid Amount:</strong> ₹${(batchTotal * 0.5).toLocaleString('en-IN')}</td>
+            <td style="padding: 5px; width: 33%;"><strong>Credit Amount:</strong> ₹${(batchTotal * 0.5).toLocaleString('en-IN')}</td>
+          </tr>
+        </table>
+      </div>
+  
+      <!-- Signature Section -->
+      <div style="margin-top: 40px; display: flex; justify-content: space-between;">
+        <div style="width: 45%;">
+          <p style="font-weight: 600; margin-bottom: 40px;">Receiver's Signature</p>
+          <div style="border-bottom: 1px solid #000; width: 80%;"></div>
+          <p style="margin-top: 5px; font-size: 11px; color: #6b7280;">Name: ${toAddress.name || '___________________'}</p>
+          <p style="margin-top: 5px; font-size: 11px; color: #6b7280;">Date: ${new Date().toLocaleDateString()}</p>
         </div>
-        <div style="text-align: center;">
-          <p style="font-size: 13px; color: #6b7280;">Received Goods In Good Condition</p>
-        </div>
-        <div style="text-align: right;">
-          <p style="font-weight: 500;">Authorised Signature</p>
-          <div style="margin-top: 48px; border-bottom: 1px solid #9ca3af;"></div>
+        <div style="width: 45%; text-align: right;">
+          <p style="font-weight: 600; margin-bottom: 40px;">Authorized Signature</p>
+          <div style="border-bottom: 1px solid #000; width: 80%; margin-left: auto;"></div>
+          <p style="margin-top: 5px; font-size: 11px; color: #6b7280;">Name: ${fromAddress.name || '___________________'}</p>
+          <p style="margin-top: 5px; font-size: 11px; color: #6b7280;">Date: ${new Date().toLocaleDateString()}</p>
         </div>
       </div>
-
-      <div style="margin-top: 40px; border-top: 1px solid #d1d5db; padding-top: 16px; text-align: center; font-size: 11px; color: #6b7280;">
-        This is a computer generated waybill.
+  
+      <!-- Footer -->
+      <div style="margin-top: 40px; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 15px; font-size: 10px; color: #9ca3af;">
+        <p>This is a computer-generated waybill. Valid without signature.</p>
+        <p>${fromAddress.name} - ${fromAddress.address} | Phone: ${fromAddress.phone}</p>
+        <p>Generated on: ${new Date().toLocaleString()}</p>
       </div>
     `;
     
     document.body.appendChild(pdfContent);
     
     try {
-      const canvas = await html2canvas(pdfContent, { scale: 3, backgroundColor: "#ffffff", logging: false });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
+      const canvas = await html2canvas(pdfContent, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
       const imgWidth = 210;
       const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       let heightLeft = imgHeight;
       let position = 0;
       
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
       
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
       
       pdf.save(`Waybill_${batchId}.pdf`);
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
     } finally {
       document.body.removeChild(pdfContent);
       setIsDownloading(false);
     }
   };
-
+  
   const handleViewInvoice = (invoice) => {
     console.log('View invoice:', invoice);
   };
@@ -503,8 +564,8 @@ const Invoices = () => {
                         <div className="p-5 bg-white">
                           {/* Download Button */}
                           <div className="flex justify-end mb-4">
-                            <button
-                              onClick={() => downloadWaybillPDF(batch.batchId, batch.items, batch.totalAmount)}
+                            <button  
+                              onClick={() => downloadWaybillPDF(batch.batchId, batch.items, batch.totalAmount,batch.invoice)}
                               disabled={isDownloading}
                               className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-5 py-2.5 rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all flex items-center gap-2 shadow-sm"
                             >
