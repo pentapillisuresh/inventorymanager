@@ -60,7 +60,7 @@ const Expenditures = ({ onLogout }) => {
   const fetchExpenditures = async () => {
     setLoading(true);
     try {
-      const response = await ApiService.get(`/expenditures`, {
+      const response = await ApiService.get(`/expenditures/getByUser`, {
         headers: {
           Authorization: `Bearer ${clientToken}`,
           'Content-Type': 'application/json'
