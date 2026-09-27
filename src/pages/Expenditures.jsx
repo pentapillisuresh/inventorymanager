@@ -18,6 +18,11 @@ const Expenditures = ({ onLogout }) => {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
 
+  // Client-side pagination for the expenditure table.
+  // Existing API, filtering, CRUD, and statistics logic remains unchanged.
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null); // null = add mode
   const [showDetails, setShowDetails] = useState(null);
@@ -285,6 +290,70 @@ const Expenditures = ({ onLogout }) => {
     const matchesStatus = statusFilter === 'All' || expense.status === statusFilter;
     return matchesSearch && matchesCategory && matchesStatus;
   });
+
+  // Reset pagination whenever search/category/status filters change.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, statusFilter]);
+
+  // Pagination calculations use the already-filtered data.
+  const totalItems = filteredExpenditures.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+
+  const paginatedExpenditures = filteredExpenditures.slice(
+    startIndex,
+    endIndex
+  );
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (safeCurrentPage > 1) {
+      setCurrentPage(safeCurrentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (safeCurrentPage < totalPages) {
+      setCurrentPage(safeCurrentPage + 1);
+    }
+  };
+
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+
+    let startPage = Math.max(
+      1,
+      safeCurrentPage - Math.floor(maxVisiblePages / 2)
+    );
+
+    let endPage = Math.min(
+      totalPages,
+      startPage + maxVisiblePages - 1
+    );
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(
+        1,
+        endPage - maxVisiblePages + 1
+      );
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return pageNumbers;
+  };
 
   /* ------------------------------------------------------------------ */
   /* Render                                                             */
@@ -655,7 +724,7 @@ const Expenditures = ({ onLogout }) => {
                         </td>
                       </tr>
                     ) : (
-                      filteredExpenditures.map((expense) => (
+                      paginatedExpenditures.map((expense) => (
                         <tr key={expense.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.date}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.category}</td>
@@ -708,6 +777,70 @@ const Expenditures = ({ onLogout }) => {
                 </table>
               </div>
             </div>
+
+            {/* Pagination */}
+            {filteredExpenditures.length > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-4 border-t border-gray-200">
+                <div className="text-sm text-gray-600">
+                  Showing{' '}
+                  <span className="font-medium text-gray-900">
+                    {startIndex + 1}
+                  </span>{' '}
+                  to{' '}
+                  <span className="font-medium text-gray-900">
+                    {endIndex}
+                  </span>{' '}
+                  of{' '}
+                  <span className="font-medium text-gray-900">
+                    {totalItems}
+                  </span>{' '}
+                  expenses
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handlePreviousPage}
+                    disabled={safeCurrentPage === 1}
+                    className={`px-3 py-2 text-sm border rounded-lg transition-colors ${
+                      safeCurrentPage === 1
+                        ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Previous
+                  </button>
+
+                  {getPageNumbers().map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => handlePageChange(page)}
+                      className={`min-w-[40px] px-3 py-2 text-sm border rounded-lg transition-colors ${
+                        safeCurrentPage === page
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={handleNextPage}
+                    disabled={safeCurrentPage === totalPages}
+                    className={`px-3 py-2 text-sm border rounded-lg transition-colors ${
+                      safeCurrentPage === totalPages
+                        ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>

@@ -30,6 +30,11 @@ const Invoices = () => {
   const [openBatch, setOpenBatch] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Waybill pagination - display only, does not change existing API/business logic
+  const [waybillPage, setWaybillPage] = useState(1);
+  const [waybillsPerPage] = useState(20);
+
   const [pagination, setPagination] = useState({
     total: 0,
     totalPages: 0,
@@ -158,6 +163,79 @@ const Invoices = () => {
   const filteredBatches = batchArray.filter((batch) =>
     batch.batchId.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Reset Waybill pagination when search changes
+  useEffect(() => {
+    setWaybillPage(1);
+  }, [searchTerm]);
+
+  // Waybill pagination calculations
+  const totalWaybillItems = filteredBatches.length;
+  const totalWaybillPages = Math.max(
+    1,
+    Math.ceil(totalWaybillItems / waybillsPerPage)
+  );
+
+  const safeWaybillPage = Math.min(waybillPage, totalWaybillPages);
+
+  const waybillStartIndex =
+    (safeWaybillPage - 1) * waybillsPerPage;
+
+  const waybillEndIndex = Math.min(
+    waybillStartIndex + waybillsPerPage,
+    totalWaybillItems
+  );
+
+  const paginatedBatches = filteredBatches.slice(
+    waybillStartIndex,
+    waybillEndIndex
+  );
+
+  const handleWaybillPageChange = (page) => {
+    if (page >= 1 && page <= totalWaybillPages) {
+      setWaybillPage(page);
+    }
+  };
+
+  const handlePreviousWaybillPage = () => {
+    if (safeWaybillPage > 1) {
+      setWaybillPage(safeWaybillPage - 1);
+    }
+  };
+
+  const handleNextWaybillPage = () => {
+    if (safeWaybillPage < totalWaybillPages) {
+      setWaybillPage(safeWaybillPage + 1);
+    }
+  };
+
+  const getWaybillPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+
+    let startPage = Math.max(
+      1,
+      safeWaybillPage - Math.floor(maxVisiblePages / 2)
+    );
+
+    let endPage = Math.min(
+      totalWaybillPages,
+      startPage + maxVisiblePages - 1
+    );
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(
+        1,
+        endPage - maxVisiblePages + 1
+      );
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return pageNumbers;
+  };
 
   // Download Waybill PDF
   const downloadWaybillPDF = async (batchId, batchItems, batchTotal, batchInvoice) => {
@@ -531,7 +609,7 @@ const Invoices = () => {
 
               {/* Waybill List */}
               <div className="space-y-5">
-                {filteredBatches.map((batch) => {
+                {paginatedBatches.map((batch) => {
                   const isOpen = openBatch === batch.batchId;
                   const boxesInBatch = batch.items.reduce((acc, item) => {
                     if (!acc[item.boxName]) {
@@ -700,6 +778,70 @@ const Invoices = () => {
                   );
                 })}
               </div>
+
+              {/* Waybill Pagination */}
+              {totalWaybillItems > 0 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 pt-5">
+                  <div className="text-sm text-gray-600">
+                    Showing{' '}
+                    <span className="font-semibold text-gray-800">
+                      {waybillStartIndex + 1}
+                    </span>{' '}
+                    to{' '}
+                    <span className="font-semibold text-gray-800">
+                      {waybillEndIndex}
+                    </span>{' '}
+                    of{' '}
+                    <span className="font-semibold text-gray-800">
+                      {totalWaybillItems}
+                    </span>{' '}
+                    waybills
+                  </div>
+
+                  <div className="flex items-center gap-1 flex-wrap justify-center">
+                    <button
+                      type="button"
+                      onClick={handlePreviousWaybillPage}
+                      disabled={safeWaybillPage === 1}
+                      className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                        safeWaybillPage === 1
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      Previous
+                    </button>
+
+                    {getWaybillPageNumbers().map((page) => (
+                      <button
+                        type="button"
+                        key={page}
+                        onClick={() => handleWaybillPageChange(page)}
+                        className={`min-w-[40px] px-3 py-2 text-sm rounded-lg border transition-colors ${
+                          safeWaybillPage === page
+                            ? 'bg-primary-600 text-white border-primary-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={handleNextWaybillPage}
+                      disabled={safeWaybillPage === totalWaybillPages}
+                      className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                        safeWaybillPage === totalWaybillPages
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-12">

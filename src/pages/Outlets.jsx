@@ -9,6 +9,9 @@ const Outlets = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+  // Pagination - display only, does not change existing API/business logic
+  const [outletPage, setOutletPage] = useState(1);
+  const [outletsPerPage] = useState(20);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -284,6 +287,79 @@ const Outlets = () => {
     return matchesSearch && matchesStatus;
   });
 
+  // Reset pagination when search or status filter changes
+  useEffect(() => {
+    setOutletPage(1);
+  }, [searchTerm, filterStatus]);
+
+  // Outlet pagination calculations
+  const totalOutletItems = filteredOutlets.length;
+  const totalOutletPages = Math.max(
+    1,
+    Math.ceil(totalOutletItems / outletsPerPage)
+  );
+
+  const safeOutletPage = Math.min(outletPage, totalOutletPages);
+
+  const outletStartIndex =
+    (safeOutletPage - 1) * outletsPerPage;
+
+  const outletEndIndex = Math.min(
+    outletStartIndex + outletsPerPage,
+    totalOutletItems
+  );
+
+  const paginatedOutlets = filteredOutlets.slice(
+    outletStartIndex,
+    outletEndIndex
+  );
+
+  const handleOutletPageChange = (page) => {
+    if (page >= 1 && page <= totalOutletPages) {
+      setOutletPage(page);
+    }
+  };
+
+  const handlePreviousOutletPage = () => {
+    if (safeOutletPage > 1) {
+      setOutletPage(safeOutletPage - 1);
+    }
+  };
+
+  const handleNextOutletPage = () => {
+    if (safeOutletPage < totalOutletPages) {
+      setOutletPage(safeOutletPage + 1);
+    }
+  };
+
+  const getOutletPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+
+    let startPage = Math.max(
+      1,
+      safeOutletPage - Math.floor(maxVisiblePages / 2)
+    );
+
+    let endPage = Math.min(
+      totalOutletPages,
+      startPage + maxVisiblePages - 1
+    );
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(
+        1,
+        endPage - maxVisiblePages + 1
+      );
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return pageNumbers;
+  };
+
   const totalOutlets = outlets.length;
   const activeOutlets = outlets.filter(o => o.isActive).length;
   const inactiveOutlets = outlets.filter(o => !o.isActive).length;
@@ -387,7 +463,7 @@ const Outlets = () => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredOutlets.length > 0 ? (
-                filteredOutlets.map((outlet) => (
+                paginatedOutlets.map((outlet) => (
                   <tr key={outlet.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{outlet.name}</div>
@@ -448,6 +524,70 @@ const Outlets = () => {
           </table>
         </div>
       </div>
+
+      {/* Outlet Pagination */}
+      {totalOutletItems > 0 && (
+        <div className="bg-white px-4 py-3 border border-gray-200 rounded-lg mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-sm text-gray-600">
+            Showing{' '}
+            <span className="font-medium text-gray-800">
+              {outletStartIndex + 1}
+            </span>
+            {' '}to{' '}
+            <span className="font-medium text-gray-800">
+              {outletEndIndex}
+            </span>
+            {' '}of{' '}
+            <span className="font-medium text-gray-800">
+              {totalOutletItems}
+            </span>
+            {' '}outlets
+          </div>
+
+          <div className="flex items-center justify-center gap-1">
+            <button
+              type="button"
+              onClick={handlePreviousOutletPage}
+              disabled={safeOutletPage === 1}
+              className={`px-3 py-2 text-sm border rounded-lg transition-colors ${
+                safeOutletPage === 1
+                  ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                  : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Previous
+            </button>
+
+            {getOutletPageNumbers().map((page) => (
+              <button
+                key={page}
+                type="button"
+                onClick={() => handleOutletPageChange(page)}
+                className={`min-w-[38px] px-3 py-2 text-sm border rounded-lg transition-colors ${
+                  safeOutletPage === page
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              onClick={handleNextOutletPage}
+              disabled={safeOutletPage === totalOutletPages}
+              className={`px-3 py-2 text-sm border rounded-lg transition-colors ${
+                safeOutletPage === totalOutletPages
+                  ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                  : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add Outlet Modal */}
       {showAddModal && (

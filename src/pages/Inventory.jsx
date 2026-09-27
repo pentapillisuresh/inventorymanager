@@ -11,6 +11,10 @@ const Inventory = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [inventory, setInventory] = useState([]);
+
+  // Pagination for Low Stock table
+  const [lowStockPage, setLowStockPage] = useState(1);
+  const lowStockItemsPerPage = 20;
   const [summary, setSummary] = useState({
     totalItems: 0,
     totalQuantity: 0,
@@ -108,6 +112,65 @@ const Inventory = () => {
   const goodStockCount = transformedInventory.filter(item => 
     item.quantity >= item.minStock * 1.5
   ).length;
+
+  // Keep pagination valid when inventory data changes
+  useEffect(() => {
+    setLowStockPage(1);
+  }, [inventory]);
+
+  // Low stock items used only for pagination/display
+  const lowStockItems = transformedInventory.filter(
+    item => item.quantity < item.minStock
+  );
+
+  const lowStockTotalPages = Math.max(
+    1,
+    Math.ceil(lowStockItems.length / lowStockItemsPerPage)
+  );
+
+  const safeLowStockPage = Math.min(lowStockPage, lowStockTotalPages);
+
+  const lowStockStartIndex =
+    (safeLowStockPage - 1) * lowStockItemsPerPage;
+
+  const paginatedLowStockItems = lowStockItems.slice(
+    lowStockStartIndex,
+    lowStockStartIndex + lowStockItemsPerPage
+  );
+
+  const handleLowStockPageChange = (page) => {
+    if (page >= 1 && page <= lowStockTotalPages) {
+      setLowStockPage(page);
+    }
+  };
+
+  const getLowStockPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    let startPage = Math.max(
+      1,
+      safeLowStockPage - Math.floor(maxVisiblePages / 2)
+    );
+
+    let endPage = Math.min(
+      lowStockTotalPages,
+      startPage + maxVisiblePages - 1
+    );
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(
+        1,
+        endPage - maxVisiblePages + 1
+      );
+    }
+
+    for (let page = startPage; page <= endPage; page += 1) {
+      pages.push(page);
+    }
+
+    return pages;
+  };
 
   const handleEditProduct = (product) => {
     // Implement edit functionality with API
@@ -312,9 +375,7 @@ const Inventory = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {transformedInventory
-                        .filter(item => item.quantity < item.minStock)
-                        .map((item) => {
+                      {paginatedLowStockItems.map((item) => {
                           const percentage = Math.round((item.quantity / item.minStock) * 100);
                           const getStockLevelColor = () => {
                             if (percentage < 50) return 'bg-red-100 text-red-800';
@@ -378,6 +439,77 @@ const Inventory = () => {
                   </table>
                 </div>
                 
+                {/* Pagination */}
+                {lowStockItems.length > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                    <div className="text-sm text-gray-600">
+                      Showing{' '}
+                      <span className="font-medium">
+                        {lowStockStartIndex + 1}
+                      </span>{' '}
+                      to{' '}
+                      <span className="font-medium">
+                        {Math.min(
+                          lowStockStartIndex + lowStockItemsPerPage,
+                          lowStockItems.length
+                        )}
+                      </span>{' '}
+                      of{' '}
+                      <span className="font-medium">
+                        {lowStockItems.length}
+                      </span>{' '}
+                      low stock items
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleLowStockPageChange(safeLowStockPage - 1)
+                        }
+                        disabled={safeLowStockPage === 1}
+                        className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                          safeLowStockPage === 1
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Previous
+                      </button>
+
+                      {getLowStockPageNumbers().map((page) => (
+                        <button
+                          type="button"
+                          key={page}
+                          onClick={() => handleLowStockPageChange(page)}
+                          className={`min-w-[40px] px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                            safeLowStockPage === page
+                              ? 'bg-primary-600 text-white border-primary-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleLowStockPageChange(safeLowStockPage + 1)
+                        }
+                        disabled={safeLowStockPage === lowStockTotalPages}
+                        className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                          safeLowStockPage === lowStockTotalPages
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary */}
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">

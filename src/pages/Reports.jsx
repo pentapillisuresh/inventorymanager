@@ -4,6 +4,7 @@ import ReportCards from '../components/Reports/ReportCards';
 import { generateReportData } from '../utils/helpers';
 import { FiFileText, FiTrendingUp, FiUsers, FiDollarSign, FiDownload } from 'react-icons/fi';
 import ApiService from '../utils/ApiService';
+import jsPDF from 'jspdf';
 
 const Reports = () => {
   const [loading, setLoading] = useState(true);
@@ -116,30 +117,308 @@ const Reports = () => {
     fetchReportData();
   }, []);
 
-  const handleGenerateReport = (reportType) => {
-    let data;
-    let filename;
-    
-    switch(reportType) {
-      case 'inventory':
-        data = reports.inventory;
-        filename = 'inventory_report.csv';
-        break;
-      case 'sales':
-        data = reports.sales;
-        filename = 'sales_report.csv';
-        break;
-      case 'outlets':
-        data = reports.outlets;
-        filename = 'outlets_report.csv';
-        break;
-      case 'credit':
-        data = reports.credit;
-        filename = 'credit_report.csv';
-        break;
-      default:
-        return;
+  const escapeCsvValue = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+
+    let stringValue;
+
+    if (typeof value === 'object') {
+      try {
+        stringValue = JSON.stringify(value);
+      } catch {
+        stringValue = String(value);
+      }
+    } else {
+      stringValue = String(value);
     }
+
+    return stringValue.includes(',') ||
+      stringValue.includes('"') ||
+      stringValue.includes('\n') ||
+      stringValue.includes('\r')
+      ? `"${stringValue.replace(/"/g, '""')}"`
+      : stringValue;
+  };
+
+  const getReportData = (reportType) => {
+    switch (reportType) {
+      case 'inventory':
+        return reports.inventory;
+      case 'sales':
+        return reports.sales;
+      case 'outlets':
+        return reports.outlets;
+      case 'credit':
+        return reports.credit;
+      default:
+        return [];
+    }
+  };
+
+  const getReportTitle = (reportType) => {
+    return `${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report`;
+  };
+
+  const formatPdfValue = (value) => {
+    if (value === null || value === undefined || value === '') return '-';
+
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    }
+
+    return String(value);
+  };
+
+  const addPdfText = (doc, text, x, y, maxWidth, lineHeight = 5) => {
+    const safeText = String(text ?? '-');
+    const lines = doc.splitTextToSize(safeText, maxWidth);
+
+    let currentY = y;
+
+    lines.forEach((line) => {
+      if (currentY > 280) {
+        doc.addPage();
+        currentY = 18;
+      }
+
+      doc.text(line, x, currentY);
+      currentY += lineHeight;
+    });
+
+    return currentY;
+  };
+
+  const downloadPdfReport = (reportType, data) => {
+    if (!data || data.length === 0) {
+      alert(`No data available for ${reportType} report`);
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const title = getReportTitle(reportType);
+    const generatedDate = new Date().toLocaleString('en-IN');
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 10;
+
+    const addHeader = () => {
+      doc.setFillColor(37, 99, 235);
+      doc.rect(0, 0, pageWidth, 28, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, margin, 12);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated: ${generatedDate}`, margin, 20);
+
+      doc.setTextColor(31, 41, 55);
+    };
+
+    addHeader();
+
+    let y = 38;
+
+    // Summary information
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Report Summary', margin, y);
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+
+    const summaryValues = [
+      ['Report Type', title],
+      ['Records', String(data.length)],
+      ['Generated On', generatedDate]
+    ];
+
+    summaryValues.forEach(([label, value]) => {
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${label}:`, margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(value, margin + 32, y);
+      y += 5;
+    });
+
+    y += 5;
+
+    // Determine columns from the actual report data.
+    const headers = Object.keys(data[0] || {});
+
+    if (headers.length === 0) {
+      doc.setFont('helvetica', 'normal');
+      doc.text('No report columns available.', margin, y);
+      doc.save(`${reportType}_report.pdf`);
+      return;
+    }
+
+    // Keep the PDF readable even when API data contains many columns.
+    // Long/nested values are shortened in cells but the full data remains available in CSV.
+    const maxColumns = 8;
+    const visibleHeaders = headers.slice(0, maxColumns);
+
+    const availableWidth = pageWidth - margin * 2;
+    const columnWidth = availableWidth / visibleHeaders.length;
+    const headerHeight = 9;
+    const rowHeight = 7;
+
+    const drawTableHeader = () => {
+      if (y + headerHeight > pageHeight - 12) {
+        doc.addPage();
+        addHeader();
+        y = 38;
+      }
+
+      doc.setFillColor(243, 244, 246);
+      doc.setDrawColor(209, 213, 219);
+      doc.rect(
+        margin,
+        y - 5,
+        availableWidth,
+        headerHeight,
+        'FD'
+      );
+
+      doc.setTextColor(31, 41, 55);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+
+      visibleHeaders.forEach((header, index) => {
+        const x = margin + index * columnWidth + 2;
+        const headerText = doc.splitTextToSize(
+          String(header),
+          Math.max(columnWidth - 4, 10)
+        )[0];
+
+        doc.text(headerText, x, y);
+      });
+
+      y += headerHeight;
+      doc.setFont('helvetica', 'normal');
+    };
+
+    drawTableHeader();
+
+    data.forEach((row) => {
+      const cellValues = visibleHeaders.map((header) => {
+        let value = formatPdfValue(row?.[header]);
+
+        // Keep cells compact and readable.
+        if (value.length > 45) {
+          value = `${value.substring(0, 42)}...`;
+        }
+
+        return value;
+      });
+
+      const wrappedCells = cellValues.map((value) =>
+        doc.splitTextToSize(value, Math.max(columnWidth - 4, 10))
+      );
+
+      const requiredHeight = Math.max(
+        rowHeight,
+        ...wrappedCells.map((lines) => lines.length * 3.5 + 3)
+      );
+
+      if (y + requiredHeight > pageHeight - 12) {
+        doc.addPage();
+        addHeader();
+        y = 38;
+        drawTableHeader();
+      }
+
+      doc.setDrawColor(229, 231, 235);
+      doc.setFontSize(6.5);
+
+      if (Math.floor(data.indexOf(row)) % 2 === 0) {
+        doc.setFillColor(249, 250, 251);
+        doc.rect(
+          margin,
+          y - 4,
+          availableWidth,
+          requiredHeight,
+          'F'
+        );
+      }
+
+      wrappedCells.forEach((lines, index) => {
+        const x = margin + index * columnWidth + 2;
+
+        lines.forEach((line, lineIndex) => {
+          doc.text(line, x, y + lineIndex * 3.5);
+        });
+
+        doc.line(
+          margin + index * columnWidth,
+          y - 4,
+          margin + index * columnWidth,
+          y + requiredHeight - 4
+        );
+      });
+
+      doc.rect(
+        margin,
+        y - 4,
+        availableWidth,
+        requiredHeight
+      );
+
+      y += requiredHeight;
+    });
+
+    if (headers.length > maxColumns) {
+      if (y > pageHeight - 25) {
+        doc.addPage();
+        addHeader();
+        y = 38;
+      }
+
+      y += 6;
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.text(
+        `Note: PDF displays the first ${maxColumns} columns. Download CSV for the complete dataset.`,
+        margin,
+        y
+      );
+    }
+
+    // Page numbers
+    const totalPages = doc.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page += 1) {
+      doc.setPage(page);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(107, 114, 128);
+
+      doc.text(
+        `Page ${page} of ${totalPages}`,
+        pageWidth - margin,
+        pageHeight - 6,
+        { align: 'right' }
+      );
+    }
+
+    doc.save(`${reportType}_report_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  const handleGenerateReport = (reportType, format = 'csv') => {
+    const data = getReportData(reportType);
 
     // Check if there's data to export
     if (!data || data.length === 0) {
@@ -148,38 +427,63 @@ const Reports = () => {
     }
 
     try {
-      // Convert data to CSV
+      if (format.toLowerCase() === 'pdf') {
+        downloadPdfReport(reportType, data);
+
+        alert(
+          `${getReportTitle(reportType)} PDF downloaded successfully!`
+        );
+
+        return;
+      }
+
+      // CSV export
+      const filename = `${reportType}_report_${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+
       const headers = Object.keys(data[0] || {});
+
       const csvRows = [
-        headers.join(','),
-        ...data.map(row => 
-          headers.map(header => {
-            const value = row[header];
-            // Handle undefined/null values and escape quotes in strings
-            if (value === null || value === undefined || value === '') return '';
-            const stringValue = String(value);
-            return stringValue.includes(',') || stringValue.includes('"') 
-              ? `"${stringValue.replace(/"/g, '""')}"` 
-              : stringValue;
-          }).join(',')
+        headers.map(escapeCsvValue).join(','),
+        ...data.map((row) =>
+          headers
+            .map((header) => escapeCsvValue(row?.[header]))
+            .join(',')
         )
       ];
 
       const csvString = csvRows.join('\n');
-      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+
+      // BOM helps Excel correctly detect UTF-8 content.
+      const blob = new Blob(
+        ['\uFEFF', csvString],
+        { type: 'text/csv;charset=utf-8;' }
+      );
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+
       a.href = url;
       a.download = filename;
+      a.style.display = 'none';
+
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      alert(`${reportType.charAt(0).toUpperCase() + reportType.slice(1)} report downloaded successfully!`);
+
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+
+      alert(
+        `${getReportTitle(reportType)} CSV downloaded successfully!`
+      );
     } catch (error) {
-      console.error('Error generating report:', error);
-      alert('Error generating report. Please try again.');
+      console.error(`Error generating ${format} report:`, error);
+      alert(
+        `Error generating ${format.toUpperCase()} report. Please try again.`
+      );
     }
   };
 
@@ -298,14 +602,25 @@ const Reports = () => {
             </div>
             <h3 className="font-bold text-lg mb-2">Inventory Report</h3>
             <p className="text-gray-600 mb-4">Complete inventory list with stock levels and locations</p>
-            <button 
-              onClick={() => handleGenerateReport('inventory')}
-              className="btn-primary w-full flex items-center justify-center space-x-2"
-              disabled={!reports.inventory || reports.inventory.length === 0}
-            >
-              <FiDownload />
-              <span>Download CSV</span>
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={() => handleGenerateReport('inventory', 'csv')}
+                className="btn-primary w-full flex items-center justify-center space-x-2"
+                disabled={!reports.inventory || reports.inventory.length === 0}
+              >
+                <FiDownload />
+                <span>Download CSV</span>
+              </button>
+
+              <button
+                onClick={() => handleGenerateReport('inventory', 'pdf')}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!reports.inventory || reports.inventory.length === 0}
+              >
+                <FiFileText />
+                <span>Download PDF</span>
+              </button>
+            </div>
           </div>
 
           <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
@@ -314,14 +629,25 @@ const Reports = () => {
             </div>
             <h3 className="font-bold text-lg mb-2">Sales Report</h3>
             <p className="text-gray-600 mb-4">All invoices with status, payments, and totals</p>
-            <button 
-              onClick={() => handleGenerateReport('sales')}
-              className="btn-primary w-full flex items-center justify-center space-x-2"
-              disabled={!reports.sales || reports.sales.length === 0}
-            >
-              <FiDownload />
-              <span>Download CSV</span>
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={() => handleGenerateReport('sales', 'csv')}
+                className="btn-primary w-full flex items-center justify-center space-x-2"
+                disabled={!reports.sales || reports.sales.length === 0}
+              >
+                <FiDownload />
+                <span>Download CSV</span>
+              </button>
+
+              <button
+                onClick={() => handleGenerateReport('sales', 'pdf')}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!reports.sales || reports.sales.length === 0}
+              >
+                <FiFileText />
+                <span>Download PDF</span>
+              </button>
+            </div>
           </div>
 
           <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
@@ -330,14 +656,25 @@ const Reports = () => {
             </div>
             <h3 className="font-bold text-lg mb-2">Outlet Report</h3>
             <p className="text-gray-600 mb-4">Complete outlet list with credit limits and status</p>
-            <button 
-              onClick={() => handleGenerateReport('outlets')}
-              className="btn-primary w-full flex items-center justify-center space-x-2"
-              disabled={!reports.outlets || reports.outlets.length === 0}
-            >
-              <FiDownload />
-              <span>Download CSV</span>
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={() => handleGenerateReport('outlets', 'csv')}
+                className="btn-primary w-full flex items-center justify-center space-x-2"
+                disabled={!reports.outlets || reports.outlets.length === 0}
+              >
+                <FiDownload />
+                <span>Download CSV</span>
+              </button>
+
+              <button
+                onClick={() => handleGenerateReport('outlets', 'pdf')}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!reports.outlets || reports.outlets.length === 0}
+              >
+                <FiFileText />
+                <span>Download PDF</span>
+              </button>
+            </div>
           </div>
 
           <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
@@ -346,14 +683,25 @@ const Reports = () => {
             </div>
             <h3 className="font-bold text-lg mb-2">Credit Report</h3>
             <p className="text-gray-600 mb-4">Outstanding credits and payment tracking</p>
-            <button 
-              onClick={() => handleGenerateReport('credit')}
-              className="btn-primary w-full flex items-center justify-center space-x-2"
-              disabled={!reports.credit || reports.credit.length === 0}
-            >
-              <FiDownload />
-              <span>Download CSV</span>
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={() => handleGenerateReport('credit', 'csv')}
+                className="btn-primary w-full flex items-center justify-center space-x-2"
+                disabled={!reports.credit || reports.credit.length === 0}
+              >
+                <FiDownload />
+                <span>Download CSV</span>
+              </button>
+
+              <button
+                onClick={() => handleGenerateReport('credit', 'pdf')}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!reports.credit || reports.credit.length === 0}
+              >
+                <FiFileText />
+                <span>Download PDF</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
