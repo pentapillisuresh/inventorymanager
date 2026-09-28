@@ -9,6 +9,30 @@ import jsPDF from 'jspdf';
 
 const API_BASE_URL = 'https://service.billmitras.com/api';
 const ITEMS_PER_PAGE = 20;
+const EXPENSE_GROUP_STORAGE_KEY = 'billmitras_expense_group_map';
+
+const getExpenseGroupMap = () => {
+  try {
+    const saved = localStorage.getItem(EXPENSE_GROUP_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch (error) {
+    console.error('Error reading expense group map:', error);
+    return {};
+  }
+};
+
+const saveExpenseGroupMap = (map) => {
+  try {
+    localStorage.setItem(EXPENSE_GROUP_STORAGE_KEY, JSON.stringify(map));
+  } catch (error) {
+    console.error('Error saving expense group map:', error);
+  }
+};
+
+const getCreatedExpenseId = (response) => (
+  response?.id ?? response?.expenditure?.id ?? response?.expense?.id ??
+  response?.data?.id ?? response?.data?.expenditure?.id ?? response?.data?.expense?.id ?? null
+);
 
 const Expenditures = ({ onLogout }) => {
   const [expenditures, setExpenditures] = useState([]);
@@ -65,8 +89,11 @@ const Expenditures = ({ onLogout }) => {
       });
       if (!response) throw new Error('Failed to fetch expenditures');
 
+      const storedGroupMap = getExpenseGroupMap();
+
       const records = (response.expenditures || []).map((exp) => ({
         id: exp.id,
+        groupId: storedGroupMap[String(exp.id)] || null,
         date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : '',
         category: exp.category || '',
         description: exp.description || '',
@@ -130,7 +157,8 @@ const Expenditures = ({ onLogout }) => {
     // Keep the complete group while editing so every originally added item is editable.
     setEditingExpense({
       ...expense,
-      items
+      items,
+      groupId: expense.groupId || items.find(item => item.groupId)?.groupId || null
     });
 
     setNewExpense({
@@ -250,6 +278,16 @@ const Expenditures = ({ onLogout }) => {
             throw new Error(`Failed to save expense: ${item.description}`);
           }
 
+          const savedExpenseId = item.id || getCreatedExpenseId(response);
+          if (!savedExpenseId) {
+            throw new Error(`The API did not return an expense ID for: ${item.description}`);
+          }
+
+          const editGroupId = editingExpense.groupId || `expense-group-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+          const existingGroupMap = getExpenseGroupMap();
+          existingGroupMap[String(savedExpenseId)] = editGroupId;
+          saveExpenseGroupMap(existingGroupMap);
+
           if (!categories.includes(item.category) && !addedCategories.includes(item.category)) {
             addedCategories.push(item.category);
           }
@@ -263,6 +301,9 @@ const Expenditures = ({ onLogout }) => {
               'Content-Type': 'application/json'
             }
           });
+          const existingGroupMap = getExpenseGroupMap();
+          delete existingGroupMap[String(item.id)];
+          saveExpenseGroupMap(existingGroupMap);
         }
 
         if (addedCategories.length) {
@@ -289,6 +330,12 @@ const Expenditures = ({ onLogout }) => {
 
       const addedCategories = [];
       let firstItem = true;
+
+      // One Add Expense click = one group. Category does not matter.
+      // The next Add Expense click always gets a new group.
+      const batchGroupId = `expense-group-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const groupMap = getExpenseGroupMap();
+
       for (const item of validItems) {
         const formData = new FormData();
         formData.append('category', item.category.trim());
@@ -302,11 +349,20 @@ const Expenditures = ({ onLogout }) => {
         });
         if (!response) throw new Error(`Failed to add expense: ${item.description}`);
 
+        const createdExpenseId = getCreatedExpenseId(response);
+        if (!createdExpenseId) {
+          throw new Error(`The API did not return an expense ID for: ${item.description}`);
+        }
+
+        groupMap[String(createdExpenseId)] = batchGroupId;
+
         if (!categories.includes(item.category) && !addedCategories.includes(item.category)) {
           addedCategories.push(item.category);
         }
         firstItem = false;
       }
+
+      saveExpenseGroupMap(groupMap);
 
       if (addedCategories.length) setCategories(prev => [...prev, ...addedCategories]);
       await fetchExpenditures();
@@ -322,13 +378,18 @@ const Expenditures = ({ onLogout }) => {
 
   // Groups records having the same date + category into one table row.
   // The original records remain intact inside group.items for View/PDF/Delete.
+  // Grouping is based on the Add Expense submission, not date or category.
+  // Rows created together share groupId; a later Add Expense gets a new groupId.
+  // Old records without groupId remain individual rows.
   const groupedExpenditures = expenditures.reduce((groups, expense) => {
-    const key = `${expense.date}__${expense.category.trim().toLowerCase()}`;
+    const key = expense.groupId ? `group-${expense.groupId}` : `single-${expense.id}`;
+
     if (!groups[key]) {
       groups[key] = {
-        id: `group-${expense.date}-${expense.category}`,
+        id: key,
+        groupId: expense.groupId || null,
         date: expense.date,
-        category: expense.category,
+        category: '',
         status: expense.status,
         adminName: expense.adminName,
         receiptImage: expense.receiptImage,
@@ -336,11 +397,19 @@ const Expenditures = ({ onLogout }) => {
         amount: 0
       };
     }
+
     groups[key].items.push(expense);
     groups[key].amount += Number(expense.amount || 0);
+
+    const groupCategories = groups[key].items
+      .map(item => item.category?.trim())
+      .filter(Boolean);
+    groups[key].category = [...new Set(groupCategories)].join(', ');
+
     if (expense.status === 'Pending') groups[key].status = 'Pending';
     if (!groups[key].adminName && expense.adminName) groups[key].adminName = expense.adminName;
     if (!groups[key].receiptImage && expense.receiptImage) groups[key].receiptImage = expense.receiptImage;
+
     return groups;
   }, {});
 
@@ -389,11 +458,14 @@ const Expenditures = ({ onLogout }) => {
 
     try {
       setDeletingId(group.id);
+      const groupMap = getExpenseGroupMap();
       for (const item of group.items) {
         await ApiService.delete(`/expenditures/${item.id}`, {
           headers: { Authorization: `Bearer ${clientToken}`, 'Content-Type': 'application/json' }
         });
+        delete groupMap[String(item.id)];
       }
+      saveExpenseGroupMap(groupMap);
       setExpenditures(prev => prev.filter(exp => !group.items.some(item => item.id === exp.id)));
       alert(count > 1 ? `${count} expenses deleted successfully!` : 'Expense deleted successfully!');
       await fetchExpenditures();
@@ -569,7 +641,7 @@ const Expenditures = ({ onLogout }) => {
                     {showDetails.items.map((item, index) => (
                       <div key={item.id || index} className="px-4 py-3 grid grid-cols-12 border-t text-sm">
                         <span className="col-span-1 text-gray-500">{index + 1}</span>
-                        <span className="col-span-8 text-gray-900">{item.description}</span>
+                        <span className="col-span-8 text-gray-900"><span className="font-medium">{item.category}</span><span className="block text-xs text-gray-500 mt-0.5">{item.description}</span></span>
                         <span className="col-span-3 text-right font-semibold">₹{Number(item.amount || 0).toFixed(2)}</span>
                       </div>
                     ))}
@@ -619,7 +691,7 @@ const Expenditures = ({ onLogout }) => {
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50"><tr>
-                    {['Date','Category','Description','Amount','Status','Added By','Actions'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>)}
+                    {['Date','Categories','Description','Amount','Status','Added By','Actions'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>)}
                   </tr></thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {loading ? <tr><td colSpan="7" className="px-6 py-12 text-center"><FaSpinner className="animate-spin inline text-2xl text-blue-600 mr-3" />Loading expenses...</td></tr> : filteredExpenditures.length === 0 ? <tr><td colSpan="7" className="px-6 py-12 text-center"><div className="text-gray-400 mb-2">No expenses found</div><div className="text-gray-500 text-sm">{searchTerm || categoryFilter !== 'All' || statusFilter !== 'All' ? 'Try adjusting your search or filters' : 'Add your first expense using the button above'}</div></td></tr> : paginatedExpenditures.map(group => (
@@ -628,7 +700,7 @@ const Expenditures = ({ onLogout }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{group.category}</td>
                         <td className="px-6 py-4 text-sm text-gray-900">
                           <div className="font-medium">{group.items.length} item{group.items.length > 1 ? 's' : ''}</div>
-                          <div className="text-xs text-gray-500 truncate max-w-xs">{group.items.map(item => item.description).join(', ')}</div>
+                          <div className="text-xs text-gray-500 truncate max-w-xs">{group.items.map(item => `${item.category}: ${item.description}`).join(', ')}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">₹{Number(group.amount || 0).toFixed(2)}</td>
                         <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(group.status)}`}>{group.status}</span></td>
