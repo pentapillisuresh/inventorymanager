@@ -254,7 +254,8 @@ const Invoices = () => {
       name: batchInvoice?.createdUser?.name || 'N/A',
       address: batchInvoice?.createdUser?.officeAddress || 'N/A',
       phone: batchInvoice?.createdUser?.phoneNumber || 'N/A',
-      email: batchInvoice?.createdUser?.email || 'N/A'
+      email: batchInvoice?.createdUser?.email || 'N/A',
+      GST_No: batchInvoice?.createdUser?.GST_No || 'N/A'
     };
 
     let toAddress = {};
@@ -262,13 +263,15 @@ const Invoices = () => {
       toAddress = {
         name: batchInvoice?.Store?.name || 'N/A',
         address: batchInvoice?.Store?.address || 'N/A',
-        phone: batchInvoice?.Store?.phoneNumber || 'N/A'
+        phone: batchInvoice?.Store?.phoneNumber || 'N/A',
+        GST_No: batchInvoice?.Store?.GST_No || 'N/A'
       };
     } else {
       toAddress = {
         name: batchInvoice?.Outlet?.name || 'N/A',
         address: batchInvoice?.Outlet?.address || 'N/A',
-        phone: batchInvoice?.Outlet?.phoneNumber || 'N/A'
+        phone: batchInvoice?.Outlet?.phoneNumber || 'N/A',
+        GST_No: batchInvoice?.Outlet?.GST_No || 'N/A'
       };
     }
 
@@ -301,6 +304,7 @@ const Invoices = () => {
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">${fromAddress.address}</p>
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Phone: ${fromAddress.phone}</p>
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Email: ${fromAddress.email}</p>
+          <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">GST No: ${fromAddress.GST_No}</p>
         </div>
 
         <div style="flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; background: #f9fafb;">
@@ -308,6 +312,7 @@ const Invoices = () => {
           <p style="margin: 5px 0; font-weight: 600;">${toAddress.name}</p>
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">${toAddress.address}</p>
           <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">Phone: ${toAddress.phone}</p>
+          <p style="margin: 5px 0; font-size: 12px; color: #4b5563;">GST No: ${toAddress.GST_No}</p>
         </div>
       </div>
 
