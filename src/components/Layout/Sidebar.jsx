@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiHome, FiPackage, FiFileText, FiUsers, FiBarChart2, FiLogOut, FiMenu, FiX, FiChevronRight, FiPlusCircle, FiShoppingBag, FiTruck, FiDollarSign, FiUserCheck, FiSettings } from 'react-icons/fi';
+import { ClipboardList } from "lucide-react";
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { FaRupeeSign } from 'react-icons/fa';
 
@@ -108,6 +109,13 @@ const Sidebar = () => {
       badge: null,
       requiredPermission: null // Visible to all
     },
+  {
+  path: "/outlet-requests",
+  icon: ClipboardList,
+  label: "Outlet Requests",
+  badge: null,
+  requiredPermission: null,
+},
   ];
 
   // Check if user has permission to view a menu item

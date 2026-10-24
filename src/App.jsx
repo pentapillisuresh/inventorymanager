@@ -9,6 +9,7 @@ import Expenditures from './pages/Expenditures';
 import Reports from './pages/Reports';
 import AddProduct from './pages/Product';
 import Login from './pages/Login';
+import OutletRequests from "./pages/OutletRequests";
 import { localStorageManager } from './utils/localStorage';
 
 function App() {
@@ -36,6 +37,10 @@ function App() {
           <Route path="outlets" element={<Outlets />} />
           <Route path="Expenditures" element={<Expenditures />} />
           <Route path="reports" element={<Reports />} />
+          <Route
+  path="/outlet-requests"
+  element={<OutletRequests />}
+/>
         </Route>
       </Routes>
     </Router>
